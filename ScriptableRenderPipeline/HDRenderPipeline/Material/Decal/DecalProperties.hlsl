@@ -8,6 +8,8 @@ TEXTURE2D(_NormalMap);
 SAMPLER(sampler_NormalMap);
 TEXTURE2D(_MaskMap);
 SAMPLER(sampler_MaskMap);
+TEXTURE2D(_HeightMap);
+SAMPLER(sampler_HeightMap);
 
 float _DecalBlend;
 

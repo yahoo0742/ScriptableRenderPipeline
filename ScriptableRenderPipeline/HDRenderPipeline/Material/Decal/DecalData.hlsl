@@ -26,5 +26,12 @@ void GetSurfaceData(float2 texCoordDS, out DecalSurfaceData surfaceData)
 	surfaceData.normalWS.w *= surfaceData.mask.z;
 	surfaceData.mask.z *= totalBlend;
 #endif
+}
 
+void GetSurfaceDataVS(float2 texCoordDS, out DecalSurfaceDataVS surfaceData)
+{
+	surfaceData.height = 0;
+#if _HEIGHTMAP
+	surfaceData.mask = SAMPLE_TEXTURE2D(_HeightMap, sampler_HeightMap, texCoordDS.xy); 	
+#endif
 }

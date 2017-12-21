@@ -13,14 +13,20 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
             [SurfaceDataAttributes("Normal", true)]
             public Vector4 normalWS;
             [SurfaceDataAttributes("Mask", true)]
-            public Vector4 mask; 
+            public Vector4 mask;
         };
+
+		[GenerateHLSL(PackingRules.Exact, false, true, 10001)]
+        public struct DecalSurfaceDataVS
+        {
+			[SurfaceDataAttributes("Height", true)]
+			public float height; 
+		}
 
         [GenerateHLSL(PackingRules.Exact)]
         public enum DBufferMaterial
-        {
-            // Note: This count doesn't include the velocity buffer. On shader and csharp side the velocity buffer will be added by the framework
-            Count = 3
+        {            
+            Count = 4
         };
 
         //-----------------------------------------------------------------------------
@@ -30,8 +36,8 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
 		// should this be combined into common class shared with Lit.cs???
        static public int GetMaterialDBufferCount() { return (int)DBufferMaterial.Count; }
 
-	   static RenderTextureFormat[] m_RTFormat = { RenderTextureFormat.ARGB32, RenderTextureFormat.ARGB32, RenderTextureFormat.ARGB32 };
-	   static RenderTextureReadWrite[] m_RTReadWrite = { RenderTextureReadWrite.sRGB, RenderTextureReadWrite.Linear, RenderTextureReadWrite.Linear };
+	   static RenderTextureFormat[Count] m_RTFormat = { RenderTextureFormat.ARGB32, RenderTextureFormat.ARGB32, RenderTextureFormat.ARGB32, RenderTextureFormat.RFloat };
+	   static RenderTextureReadWrite[Count] m_RTReadWrite = { RenderTextureReadWrite.sRGB, RenderTextureReadWrite.Linear, RenderTextureReadWrite.Linear, RenderTextureReadWrite.Linear};
 
        static public void GetMaterialDBufferDescription(out RenderTextureFormat[] RTFormat, out RenderTextureReadWrite[] RTReadWrite)
        {

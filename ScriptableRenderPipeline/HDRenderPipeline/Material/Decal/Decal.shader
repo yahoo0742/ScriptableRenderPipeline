@@ -5,6 +5,13 @@ Shader "HDRenderPipeline/Decal"
         _BaseColorMap("BaseColorMap", 2D) = "white" {}
 		_NormalMap("NormalMap", 2D) = "bump" {}     // Tangent space normal map
 		_MaskMap("MaskMap", 2D) = "white" {}    
+		_HeightMap("HeightMap", 2D) = "white" {}    
+        // Caution: Default value of _HeightAmplitude must be (_HeightMax - _HeightMin) * 0.01
+        [HideInInspector] _HeightAmplitude("Height Amplitude", Float) = 0.02 // In world units. This will be computed in the UI.
+        _HeightMin("Heightmap Min", Float) = -1
+        _HeightMax("Heightmap Max", Float) = 1
+        _HeightCenter("Height Center", Range(0.0, 1.0)) = 0.5 // In texture space
+
 		_DecalBlend("_DecalBlend", Range(0.0, 1.0)) = 0.5
     }
 
@@ -20,6 +27,7 @@ Shader "HDRenderPipeline/Decal"
 	#pragma shader_feature _COLORMAP
 	#pragma shader_feature _NORMALMAP
 	#pragma shader_feature _MASKMAP
+	#pragma shader_feature _HEIGHTMAP
 
 
     //-------------------------------------------------------------------------------------
