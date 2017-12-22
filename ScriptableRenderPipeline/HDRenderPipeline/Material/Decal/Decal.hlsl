@@ -3,7 +3,7 @@
 #define DBufferType0 float4
 #define DBufferType1 float4
 #define DBufferType2 float4
-#define DBufferType3 float
+#define DBufferType3 float4
 
 #ifdef DBUFFERMATERIAL_COUNT
 
@@ -91,7 +91,7 @@ void EncodeIntoDBuffer( DecalSurfaceData surfaceData,
                         out DBufferType0 outDBuffer0,
                         out DBufferType1 outDBuffer1,
 						out DBufferType2 outDBuffer2,
-						out DBufferType2 outDBuffer3
+						out DBufferType3 outDBuffer3
                         )
 {
 	outDBuffer0 = surfaceData.baseColor;
@@ -104,6 +104,7 @@ void DecodeFromDBuffer(
     DBufferType0 inDBuffer0,
     DBufferType1 inDBuffer1,
     DBufferType2 inDBuffer2,
+	DBufferType3 inDBuffer3,
     out DecalSurfaceData surfaceData
 )
 {
@@ -112,13 +113,6 @@ void DecodeFromDBuffer(
 	surfaceData.normalWS.xyz = inDBuffer1.xyz * 2.0f - 1.0f;
 	surfaceData.normalWS.w = inDBuffer1.w;
 	surfaceData.mask = inDBuffer2;
-}
-
-void DecodeFromDBufferVS(
-    DBufferType3 inDBuffer3,
-    out DecalSurfaceDataVS surfaceData
-)
-{
-    ZERO_INITIALIZE(DecalSurfaceDataVS, surfaceData);
 	surfaceData.height = inDBuffer3;
 }
+

@@ -14,14 +14,9 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
             public Vector4 normalWS;
             [SurfaceDataAttributes("Mask", true)]
             public Vector4 mask;
+			[SurfaceDataAttributes("Height", false)]
+			public Vector4 height; 
         };
-
-		[GenerateHLSL(PackingRules.Exact, false, true, 10001)]
-        public struct DecalSurfaceDataVS
-        {
-			[SurfaceDataAttributes("Height", true)]
-			public float height; 
-		}
 
         [GenerateHLSL(PackingRules.Exact)]
         public enum DBufferMaterial
@@ -36,8 +31,8 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
 		// should this be combined into common class shared with Lit.cs???
        static public int GetMaterialDBufferCount() { return (int)DBufferMaterial.Count; }
 
-	   static RenderTextureFormat[Count] m_RTFormat = { RenderTextureFormat.ARGB32, RenderTextureFormat.ARGB32, RenderTextureFormat.ARGB32, RenderTextureFormat.RFloat };
-	   static RenderTextureReadWrite[Count] m_RTReadWrite = { RenderTextureReadWrite.sRGB, RenderTextureReadWrite.Linear, RenderTextureReadWrite.Linear, RenderTextureReadWrite.Linear};
+	   static RenderTextureFormat[] m_RTFormat = { RenderTextureFormat.ARGB32, RenderTextureFormat.ARGB32, RenderTextureFormat.ARGB32, RenderTextureFormat.RGB111110Float };
+	   static RenderTextureReadWrite[] m_RTReadWrite = { RenderTextureReadWrite.sRGB, RenderTextureReadWrite.Linear, RenderTextureReadWrite.Linear, RenderTextureReadWrite.Linear};
 
        static public void GetMaterialDBufferDescription(out RenderTextureFormat[] RTFormat, out RenderTextureReadWrite[] RTReadWrite)
        {

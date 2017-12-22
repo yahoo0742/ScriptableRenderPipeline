@@ -106,6 +106,7 @@ namespace UnityEditor.Experimental.Rendering.HDPipeline
 
             if (EditorGUI.EndChangeCheck())
             {
+				heightAmplitude.floatValue = (heightMax.floatValue - heightMin.floatValue) * 0.01f; // Conversion centimeters to meters.
                 foreach (var obj in m_MaterialEditor.targets)
                     SetupMaterialKeywordsAndPassInternal((Material)obj);
             }

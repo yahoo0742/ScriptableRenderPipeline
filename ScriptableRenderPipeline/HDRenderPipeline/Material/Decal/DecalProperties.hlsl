@@ -11,6 +11,9 @@ SAMPLER(sampler_MaskMap);
 TEXTURE2D(_HeightMap);
 SAMPLER(sampler_HeightMap);
 
+float _HeightAmplitude;
+float _HeightCenter;
+
 float _DecalBlend;
 
 CBUFFER_START(Decal)
