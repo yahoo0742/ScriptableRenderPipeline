@@ -31,10 +31,11 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
         [GenerateHLSL]
         public enum ProjectionModel
         {
-            None = 0,
-            Proxy = 1,
-            HiZ = 2,
-            Linear = 3
+            None,
+            Proxy,
+            HiZ,
+            Linear,
+            Count
         };
 
         [GenerateHLSL]

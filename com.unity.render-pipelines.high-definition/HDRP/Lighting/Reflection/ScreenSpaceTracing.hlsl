@@ -231,21 +231,15 @@ float3 IntersectCellPlanes(
 float CalculateHitWeight(
     ScreenSpaceRayHit hit,
     float2 startPositionSS,
-    float minLinearDepth,
-    float settingsDepthBufferThickness,
     float settingsRayMaxScreenDistance,
     float settingsRayBlendScreenDistance
 )
 {
-    // Blend when the hit is near the thickness of the object
-    //float thicknessWeight = clamp(1 - (hit.linearDepth - minLinearDepth) / settingsDepthBufferThickness, 0, 1);
-
     // Blend when the ray when the raymarched distance is too long
     float2 screenDistanceNDC = abs(hit.positionSS.xy - startPositionSS) * _ScreenSize.zw;
     float2 screenDistanceWeights = clamp((settingsRayMaxScreenDistance - screenDistanceNDC) / settingsRayBlendScreenDistance, 0, 1);
     float screenDistanceWeight = min(screenDistanceWeights.x, screenDistanceWeights.y);
 
-//    return thicknessWeight * screenDistanceWeight;
     return screenDistanceWeight;
 }
 
@@ -287,6 +281,22 @@ float SampleBayer4(uint2 positionSS)
                                          15, 7,  13, 5) / 16;
 
     return Bayer4[positionSS.x % 4][positionSS.y % 4];
+}
+
+void PackRayHit(uint2 hitPositionSS, float2 hitPositionNDC, float hitWeight, bool hitSuccessful, out uint4 payload)
+{
+    payload.x = hitPositionSS.x | ((hitPositionSS.y) << 16);
+    payload.y = f32tof16(hitPositionNDC.x) | (f32tof16(hitPositionNDC.y) << 16);
+    payload.z = f32tof16(hitWeight) | ((hitSuccessful ? 0 : 1) << 16);
+    payload.w = 0;
+}
+
+void UnpackRayHit(uint4 payload, out uint2 hitPositionSS, out float2 hitPositionNDC, out float hitWeight, out bool hitSuccessful)
+{
+    hitPositionSS = uint2(payload.x & 0xFFFF, payload.x >> 16);
+    hitPositionNDC = float2(f16tof32(payload.y & 0xFFFF), f16tof32(payload.y >> 16));
+    hitWeight = f16tof32(payload.z & 0xFFFF);
+    hitSuccessful = (payload.z << 16) & 1;
 }
 
 // -------------------------------------------------
@@ -399,8 +409,6 @@ bool ScreenSpaceLinearRaymarch(
     hitWeight = CalculateHitWeight(
         hit,
         startPositionSS.xy,
-        invLinearDepth.r,
-        settingsDepthBufferThickness,
         settingsRayMaxScreenDistance,
         settingsRayBlendScreenDistance
     );
@@ -468,6 +476,27 @@ bool ScreenSpaceLinearRaymarch(
 // We perform a raycast against a proxy volume that approximate the current scene.
 // Is is a simple shape (Sphere, Box).
 // -------------------------------------------------
+ScreenSpaceProxyRaycastInput CreateScreenSpaceProxyRaycastInput(
+    float3          rayOriginWS,
+    float3          rayDirWS,
+    EnvLightData    envLightData
+#ifdef DEBUG_DISPLAY
+    , bool          debug
+#endif
+)
+{
+    ScreenSpaceProxyRaycastInput ssRayInput;
+    ZERO_INITIALIZE(ScreenSpaceProxyRaycastInput, ssRayInput);
+
+    ssRayInput.rayOriginWS = rayOriginWS;
+    ssRayInput.rayDirWS = rayDirWS;
+#ifdef DEBUG_DISPLAY
+    ssRayInput.debug = debug;
+#endif
+    ssRayInput.proxyData = envLightData;
+    return ssRayInput;
+}
+
 bool ScreenSpaceProxyRaycast(
     ScreenSpaceProxyRaycastInput input,
     // Settings
@@ -631,6 +660,27 @@ bool ScreenSpaceLinearProxyRaycast(
 //  - It is cheaper in case of close hit than starting with HiZ
 //  - It will start the HiZ algorithm with an offset, preventing false positive hit at ray origin.
 // -------------------------------------------------
+ScreenSpaceRaymarchInput CreateScreenSpaceHiZRaymarchInput(
+    float3          rayOriginWS,
+    float3          rayDirWS,
+    uint2           positionSS
+#ifdef DEBUG_DISPLAY
+    , bool          debug
+#endif
+)
+{
+    ScreenSpaceRaymarchInput ssRayInput;
+    ZERO_INITIALIZE(ScreenSpaceRaymarchInput, ssRayInput);
+
+    // Jitter the ray origin to trade some noise instead of banding effect
+    ssRayInput.rayOriginWS = rayOriginWS + rayDirWS * SampleBayer4(positionSS + uint2(_FrameCount, uint(_FrameCount) / 4u)) * 0.1;
+    ssRayInput.rayDirWS = rayDirWS;
+#if DEBUG_DISPLAY
+    ssRayInput.debug = debug;
+#endif
+    return ssRayInput;
+}
+
 bool ScreenSpaceHiZRaymarch(
     ScreenSpaceRaymarchInput input,
     // Settings
@@ -852,8 +902,6 @@ bool ScreenSpaceHiZRaymarch(
     hitWeight = CalculateHitWeight(
         hit,
         startPositionSS.xy,
-        minLinearDepth,
-        settingsDepthBufferThickness,
         settingsRayMaxScreenDistance,
         settingsRayBlendScreenDistance
     );

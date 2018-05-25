@@ -22,6 +22,7 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
         public ComputeShader copyChannelCS;
         public ComputeShader texturePaddingCS;
         public ComputeShader applyDistortionCS;
+        public ComputeShader screenSpaceReflectionsCS;
 
         // Lighting tile pass resources
         public ComputeShader clearDispatchIndirectShader;

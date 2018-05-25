@@ -1,0 +1,123 @@
+#pragma only_renderers d3d11 ps4 xboxone vulkan metal switch
+
+#define GROUP_SIZE 8
+
+#define LIGHTLOOP_TILE_PASS 1
+// deferred opaque always use FPTL
+#define USE_FPTL_LIGHTLIST 1
+#define UNITY_MATERIAL_LIT // Need to be define before including Material.hlsl
+
+#pragma kernel KCastRays_HiZ                KNAME=KCastRays_HiZ             PROJECTIONMODEL=PROJECTIONMODEL_HI_Z
+#pragma kernel KCastRays_Proxy              KNAME=KCastRays_Proxy           PROJECTIONMODEL=PROJECTIONMODEL_PROXY
+#pragma kernel KCastRays_Debug_HiZ          KNAME=KCastRays_Debug_HiZ       PROJECTIONMODEL=PROJECTIONMODEL_HI_Z     DEBUG_DISPLAY
+#pragma kernel KCastRays_Debug_Proxy        KNAME=KCastRays_Debug_Proxy     PROJECTIONMODEL=PROJECTIONMODEL_PROXY    DEBUG_DISPLAY
+
+
+#include "CoreRP/ShaderLibrary/Common.hlsl"
+#include "CoreRP/ShaderLibrary/GeometricTools.hlsl"
+#include "CoreRP/ShaderLibrary/ImageBasedLighting.hlsl"
+#include "HDRP/ShaderVariables.hlsl"
+#include "HDRP/Debug/DebugDisplay.hlsl"
+#include "HDRP/Material/Material.hlsl"
+#include "HDRP/Material/Builtin/BuiltinData.hlsl"
+#include "HDRP/Material/Lit/Lit.cs.hlsl"
+#include "HDRP/Lighting/LightDefinition.cs.hlsl"
+#include "HDRP/Lighting/Reflection/VolumeProjection.hlsl"
+// #define SSRTID Reflection
+// #include "HDRP/Lighting/Reflection/ScreenSpaceTracing.hlsl"
+// #undef SSRTID
+
+RW_TEXTURE2D(uint4, _SSReflectionRayHitNextTexture);
+#ifdef SHADOWS_SHADOWMASK
+TEXTURE2D(_ShadowMaskTexture);
+#endif
+
+CBUFFER_START(UnityScreenSpaceReflections)
+float4 _SSReflectionRayHitNextSize;             // (x,y) = Actual Pixel Size, (z,w) = 1 / Actual Pixel Size
+float4 _SSReflectionRayHitNextScale;            // (x,y) = Screen Scale, z = lod count, w = unused
+CBUFFER_END
+
+[numthreads(GROUP_SIZE, GROUP_SIZE, 1)]
+void KNAME(
+    uint2 groupId : SV_GroupID, 
+    uint2 groupThreadId : SV_GroupThreadID, 
+    uint2 dispatchThreadId : SV_DispatchThreadID
+)
+{
+    uint2 pixelCoord   = dispatchThreadId;
+    uint2 tileCoord    = uint2(0, 0);
+    uint  featureFlags = UINT_MAX;
+    EnvLightData envLightData;
+    ZERO_INITIALIZE(EnvLightData, envLightData);
+
+    // -------------------------------
+    // Decode pixel data
+    // -------------------------------
+    float depth = LOAD_TEXTURE2D(_CameraDepthTexture, pixelCoord.xy).x;
+    PositionInputs posInput = GetPositionInput(pixelCoord.xy, _ScreenSize.zw, depth, UNITY_MATRIX_I_VP, UNITY_MATRIX_V, tileCoord);
+
+    float3 V = GetWorldSpaceNormalizeViewDir(posInput.positionWS);
+
+    BSDFData bsdfData;
+    BakeLightingData bakeLightingData;
+    DECODE_FROM_GBUFFER(posInput.positionSS, featureFlags, bsdfData, bakeLightingData.bakeDiffuseLighting);
+    #ifdef SHADOWS_SHADOWMASK
+    DecodeShadowMask(LOAD_TEXTURE2D(_ShadowMaskTexture, posInput.positionSS), bakeLightingData.bakeShadowMask);
+    #endif
+
+    PreLightData preLightData = GetPreLightData(V, posInput, bsdfData);
+
+    // -------------------------------
+    // Initialize screen space tracing
+    // -------------------------------
+    float3 rayOriginWS              = posInput.positionWS;
+    float3 rayDirWS                 = preLightData.iblR;
+
+#if DEBUG_DISPLAY
+    int debugMode                   = DEBUGLIGHTINGMODE_SCREEN_SPACE_TRACING_REFLECTION;
+    bool debug                      = _DebugLightingMode == debugMode
+                                    && !any(int2(_MouseClickPixelCoord.xy) - int2(posInput.positionSS));
+#endif
+
+    // -------------------------------
+    // Screen space tracing query
+    // -------------------------------
+    ScreenSpaceRayHit hit;
+    ZERO_INITIALIZE(ScreenSpaceRayHit, hit);
+    bool hitSuccessful = false;
+    float hitWeight = 1;
+
+    // -------------------------------
+    // Proxy raycasting
+    // -------------------------------
+#if PROJECTIONMODEL == PROJECTIONMODEL_PROXY
+    ScreenSpaceProxyRaycastInput ssRayInput = CreateScreenSpaceProxyRaycastInput(
+        rayOriginWS,
+        rayDirWS,
+        envLightData
+#ifdef DEBUG_DISPLAY
+        , debug
+#endif
+    );
+    hitSuccessful = ScreenSpaceProxyRaycastReflection(ssRayInput, hit);
+
+    // -------------------------------
+    // HiZ raymarching
+    // -------------------------------
+#elif PROJECTIONMODEL == PROJECTIONMODEL_HI_Z
+    ScreenSpaceRaymarchInput ssRayInput = CreateScreenSpaceHiZRaymarchInput(
+        rayOriginWS,
+        rayDirWS,
+        posInput.positionSS
+#ifdef DEBUG_DISPLAY
+        , debug
+#endif
+    );
+    hitSuccessful = ScreenSpaceHiZRaymarchReflection(ssRayInput, hit, hitWeight);
+#endif
+
+    uint4 payload = uint4(0, 0, 0, 0);
+    PackRayHit(hit.positionSS, hit.positionNDC, hitWeight, hitSuccessful, payload);
+
+    _SSReflectionRayHitNextTexture[dispatchThreadId] = payload;
+}

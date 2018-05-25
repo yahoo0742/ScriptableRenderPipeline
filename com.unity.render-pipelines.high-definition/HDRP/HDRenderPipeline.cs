@@ -181,6 +181,7 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
 
         ComputeBuffer m_DebugScreenSpaceTracingData = null;
         ScreenSpaceTracingDebug[] m_DebugScreenSpaceTracingDataArray = new ScreenSpaceTracingDebug[1];
+        ScreenSpaceReflectionRenderer m_ScreenSpaceReflectionRenderer;
 
         public HDRenderPipeline(HDRenderPipelineAsset asset)
         {
@@ -212,6 +213,10 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
                     new TexturePadding(asset.renderPipelineResources.texturePaddingCS)
                     );
             m_BufferPyramid = new BufferPyramid(bufferPyramidProcessor);
+            m_ScreenSpaceReflectionRenderer = new ScreenSpaceReflectionRenderer(
+                RTHandles.DefaultInstance,
+                asset.renderPipelineResources.screenSpaceReflectionsCS
+            );
 
             EncodeBC6H.DefaultInstance = EncodeBC6H.DefaultInstance ?? new EncodeBC6H(asset.renderPipelineResources.encodeBC6HCS);
 
@@ -309,6 +314,9 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
                 m_VelocityBuffer = RTHandles.Alloc(Vector2.one, filterMode: FilterMode.Point, colorFormat: Builtin.GetVelocityBufferFormat(), sRGB: Builtin.GetVelocityBufferSRGBFlag(), enableMSAA: true, name: "Velocity");
             }
 
+            if (m_Asset.renderPipelineSettings.supportSSR)
+                m_ScreenSpaceReflectionRenderer.AllocateBuffers();
+
             m_DistortionBuffer = RTHandles.Alloc(Vector2.one, filterMode: FilterMode.Point, colorFormat: Builtin.GetDistortionBufferFormat(), sRGB: Builtin.GetDistortionBufferSRGBFlag(), name: "Distortion");
 
             // TODO: For MSAA, we'll need to add a Draw path in order to support MSAA properly
@@ -341,6 +349,8 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
 
             RTHandles.Release(m_DebugColorPickerBuffer);
             RTHandles.Release(m_DebugFullScreenTempBuffer);
+
+            m_ScreenSpaceReflectionRenderer.ReleaseBuffers();
 
             m_DebugScreenSpaceTracingData.Release();
 
@@ -550,7 +560,7 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
             m_CurrentHeight = hdCamera.actualHeight;
         }
 
-        public void PushGlobalParams(HDCamera hdCamera, CommandBuffer cmd, DiffusionProfileSettings sssParameters)
+        public void PushGlobalParams(HDCamera hdCamera, CommandBuffer cmd, FrameSettings frameSettings, DiffusionProfileSettings sssParameters)
         {
             using (new ProfilingSample(cmd, "Push Global Parameters", CustomSamplerId.PushGlobalParameters.GetSampler()))
             {
@@ -567,30 +577,29 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
                 var ssReflection = VolumeManager.instance.stack.GetComponent<ScreenSpaceReflection>()
                     ?? ScreenSpaceReflection.@default;
                 ssReflection.PushShaderParameters(cmd);
+                if (frameSettings.enableSSR)
+                    m_ScreenSpaceReflectionRenderer.PushGlobalParams(hdCamera, cmd, frameSettings);
 
                 // Set up UnityPerView CBuffer.
                 hdCamera.SetupGlobalParams(cmd, m_Time, m_LastTime, m_FrameCount);
-                if (hdCamera.frameSettings.enableStereo)
+                if (frameSettings.enableStereo)
                     hdCamera.SetupGlobalStereoParams(cmd);
 
                 cmd.SetGlobalInt(HDShaderIDs._SSReflectionEnabled, hdCamera.frameSettings.enableSSR ? 1 : 0);
 
-                PushGlobalRTHandle(
-                    cmd, 
+                cmd.SetGlobalRTHandle(
                     hdCamera.GetPreviousFrameRT((int)HDCameraFrameHistoryType.DepthPyramid), 
                     HDShaderIDs._DepthPyramidTexture, 
                     HDShaderIDs._DepthPyramidSize, 
                     HDShaderIDs._DepthPyramidScale
                 );
-                PushGlobalRTHandle(
-                    cmd, 
+                cmd.SetGlobalRTHandle( 
                     hdCamera.GetPreviousFrameRT((int)HDCameraFrameHistoryType.ColorPyramid), 
                     HDShaderIDs._ColorPyramidTexture, 
                     HDShaderIDs._ColorPyramidSize, 
                     HDShaderIDs._ColorPyramidScale
                 );
-                PushGlobalRTHandle(
-                    cmd, 
+                cmd.SetGlobalRTHandle( 
                     m_VelocityBuffer, 
                     HDShaderIDs._CameraMotionVectorsTexture, 
                     HDShaderIDs._CameraMotionVectorsSize, 
@@ -857,6 +866,9 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
                         hdCamera = HDCamera.Create(camera, m_VolumetricLightingSystem);
                     }
 
+                    if (currentFrameSettings.enableSSR)
+                        m_ScreenSpaceReflectionRenderer.AllocateCameraBuffersIfRequired(hdCamera);
+
                     // From this point, we should only use frame settings from the camera
                     hdCamera.Update(currentFrameSettings, postProcessLayer, m_VolumetricLightingSystem);
 
@@ -914,7 +926,7 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
                     }
                     renderContext.SetupCameraProperties(camera, hdCamera.frameSettings.enableStereo);
 
-                    PushGlobalParams(hdCamera, cmd, diffusionProfileSettings);
+                    PushGlobalParams(hdCamera, cmd, currentFrameSettings, diffusionProfileSettings);
 
                     // TODO: Find a correct place to bind these material textures
                     // We have to bind the material specific global parameters in this mode
@@ -955,6 +967,8 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
                     // In both forward and deferred, everything opaque should have been rendered at this point so we can safely copy the depth buffer for later processing.
                     CopyDepthBufferIfNeeded(cmd);
                     RenderDepthPyramid(hdCamera, cmd, renderContext, FullScreenDebugMode.DepthPyramid);
+                    if (currentFrameSettings.enableSSR)
+                        m_ScreenSpaceReflectionRenderer.RenderPassCastRays(hdCamera, cmd, m_CurrentDebugDisplaySettings.IsDebugDisplayEnabled());
 
                     RenderCameraVelocity(m_CullResults, hdCamera, renderContext, cmd);
 
@@ -1957,6 +1971,8 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
                     }
                 }
                 // END TEMP
+
+                m_ScreenSpaceReflectionRenderer.ClearBuffers();
             }
         }
 
@@ -1970,46 +1986,6 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
         {
             if (hdCamera.frameSettings.enableStereo)
                 renderContext.StopMultiEye(hdCamera.camera);
-        }
-
-        /// <summary>
-        /// Push a RenderTexture handled by a RTHandle in global parameters.
-        /// </summary>
-        /// <param name="cmd">Command buffer to queue commands</param>
-        /// <param name="rth">RTHandle handling the RenderTexture</param>
-        /// <param name="textureID">TextureID to use for texture binding.</param>
-        /// <param name="sizeID">Property ID to store RTHandle size ((x,y) = Actual Pixel Size, (z,w) = 1 / Actual Pixel Size).</param>
-        /// <param name="scaleID">PropertyID to store RTHandle scale ((x,y) = Screen Scale, z = lod count, w = unused).</param>
-        void PushGlobalRTHandle(CommandBuffer cmd, RTHandleSystem.RTHandle rth, int textureID, int sizeID, int scaleID)
-        {
-            if (rth != null)
-            {
-                cmd.SetGlobalTexture(textureID, rth);
-                cmd.SetGlobalVector(
-                    sizeID, 
-                    new Vector4(
-                    rth.referenceSize.x,
-                    rth.referenceSize.y,
-                    1f / rth.referenceSize.x,
-                    1f / rth.referenceSize.y
-                    )
-                );
-                cmd.SetGlobalVector(
-                    scaleID, 
-                    new Vector4(
-                    rth.referenceSize.x / (float)rth.rt.width,
-                    rth.referenceSize.y / (float)rth.rt.height,
-                    Mathf.Log(Mathf.Min(rth.rt.width, rth.rt.height), 2),
-                    0.0f
-                    )
-                );
-            }
-            else
-            {
-                cmd.SetGlobalTexture(textureID, Texture2D.blackTexture);
-                cmd.SetGlobalVector(sizeID, Vector4.one);
-                cmd.SetGlobalVector(scaleID, Vector4.one);
-            }
         }
     }
 }

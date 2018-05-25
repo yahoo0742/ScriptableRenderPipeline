@@ -6,6 +6,7 @@ namespace UnityEngine.Experimental.Rendering
     public static class RTHandles
     {
         static RTHandleSystem s_DefaultInstance = new RTHandleSystem();
+        public static RTHandleSystem DefaultInstance { get { return s_DefaultInstance; } }
 
         public static int maxWidth { get { return s_DefaultInstance.maxWidth; } }
         public static int maxHeight { get { return s_DefaultInstance.maxHeight; } }

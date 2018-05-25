@@ -5,7 +5,7 @@ using UnityEngine.Rendering;
 
 namespace UnityEngine.Experimental.Rendering.HDPipeline
 {
-    public class HDUtils
+    public static class HDUtils
     {
         public const RendererConfiguration k_RendererConfigurationBakedLighting = RendererConfiguration.PerObjectLightProbe | RendererConfiguration.PerObjectLightmaps | RendererConfiguration.PerObjectLightProbeProxyVolume;
         public const RendererConfiguration k_RendererConfigurationBakedLightingWithShadowMask = k_RendererConfigurationBakedLighting | RendererConfiguration.PerObjectOcclusionProbe | RendererConfiguration.PerObjectOcclusionProbeProxyVolume | RendererConfiguration.PerObjectShadowMask;
@@ -225,6 +225,90 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
             s_PropertyBlock.SetVector(HDShaderIDs._BlitScaleBias, scaleBias);
             s_PropertyBlock.SetFloat(HDShaderIDs._BlitMipLevel, mipLevel);
             cmd.DrawProcedural(Matrix4x4.identity, GetBlitMaterial(), bilinear ? 1 : 0, MeshTopology.Triangles, 3, 1, s_PropertyBlock);
+        }
+
+        /// <summary>
+        /// Push a RenderTexture handled by a RTHandle in global parameters.
+        /// </summary>
+        /// <param name="cmd">Command buffer to queue commands</param>
+        /// <param name="rth">RTHandle handling the RenderTexture</param>
+        /// <param name="textureID">TextureID to use for texture binding.</param>
+        /// <param name="sizeID">Property ID to store RTHandle size ((x,y) = Actual Pixel Size, (z,w) = 1 / Actual Pixel Size).</param>
+        /// <param name="scaleID">PropertyID to store RTHandle scale ((x,y) = Screen Scale, z = lod count, w = unused).</param>
+        public static void SetGlobalRTHandle(this CommandBuffer cmd, RTHandleSystem.RTHandle rth, int textureID, int sizeID, int scaleID)
+        {
+            if (rth != null)
+            {
+                cmd.SetGlobalTexture(textureID, rth);
+                cmd.SetGlobalVector(
+                    sizeID, 
+                    new Vector4(
+                    rth.referenceSize.x,
+                    rth.referenceSize.y,
+                    1f / rth.referenceSize.x,
+                    1f / rth.referenceSize.y
+                    )
+                );
+                cmd.SetGlobalVector(
+                    scaleID, 
+                    new Vector4(
+                    rth.referenceSize.x / (float)rth.rt.width,
+                    rth.referenceSize.y / (float)rth.rt.height,
+                    Mathf.Log(Mathf.Min(rth.rt.width, rth.rt.height), 2),
+                    0.0f
+                    )
+                );
+            }
+            else
+            {
+                cmd.SetGlobalTexture(textureID, Texture2D.blackTexture);
+                cmd.SetGlobalVector(sizeID, Vector4.one);
+                cmd.SetGlobalVector(scaleID, Vector4.one);
+            }
+        }
+
+        /// <summary>
+        /// Push a RenderTexture handled by a RTHandle in compute shader parameters.
+        /// </summary>
+        /// <param name="cs">Compute shader to bind</param>
+        /// <param name="kernelIndex">Kernel to bind</param>
+        /// <param name="cmd">Command buffer to queue commands</param>
+        /// <param name="rth">RTHandle handling the RenderTexture</param>
+        /// <param name="textureID">TextureID to use for texture binding.</param>
+        /// <param name="sizeID">Property ID to store RTHandle size ((x,y) = Actual Pixel Size, (z,w) = 1 / Actual Pixel Size).</param>
+        /// <param name="scaleID">PropertyID to store RTHandle scale ((x,y) = Screen Scale, z = lod count, w = unused).</param>
+        public static void SetComputeRTHandleParam(this CommandBuffer cmd, ComputeShader cs, int kernelIndex, RTHandleSystem.RTHandle rth, int textureID, int sizeID, int scaleID)
+        {
+            if (rth != null)
+            {
+                cmd.SetComputeTextureParam(cs, kernelIndex, textureID, rth);
+                cmd.SetComputeVectorParam(
+                    cs,
+                    sizeID, 
+                    new Vector4(
+                    rth.referenceSize.x,
+                    rth.referenceSize.y,
+                    1f / rth.referenceSize.x,
+                    1f / rth.referenceSize.y
+                    )
+                );
+                cmd.SetComputeVectorParam(
+                    cs,
+                    scaleID, 
+                    new Vector4(
+                    rth.referenceSize.x / (float)rth.rt.width,
+                    rth.referenceSize.y / (float)rth.rt.height,
+                    Mathf.Log(Mathf.Min(rth.rt.width, rth.rt.height), 2),
+                    0.0f
+                    )
+                );
+            }
+            else
+            {
+                cmd.SetComputeTextureParam(cs, kernelIndex, textureID, Texture2D.blackTexture);
+                cmd.SetComputeVectorParam(cs, sizeID, Vector4.one);
+                cmd.SetComputeVectorParam(cs, scaleID, Vector4.one);
+            }
         }
 
         // In the context of HDRP, the internal render targets used during the render loop are the same for all cameras, no matter the size of the camera.
