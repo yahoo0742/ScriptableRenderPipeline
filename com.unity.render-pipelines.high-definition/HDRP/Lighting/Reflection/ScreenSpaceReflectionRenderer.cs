@@ -164,7 +164,7 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
             return rtHandleSystem.Alloc(
                 Vector2.one,
                 filterMode: FilterMode.Point,
-                colorFormat: RenderTextureFormat.ARGBHalf,
+                colorFormat: RenderTextureFormat.ARGBInt,
                 sRGB: false,
                 useMipMap: false,
                 autoGenerateMips: false,

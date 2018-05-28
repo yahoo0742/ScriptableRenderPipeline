@@ -296,7 +296,7 @@ void UnpackRayHit(uint4 payload, out uint2 hitPositionSS, out float2 hitPosition
     hitPositionSS = uint2(payload.x & 0xFFFF, payload.x >> 16);
     hitPositionNDC = float2(f16tof32(payload.y & 0xFFFF), f16tof32(payload.y >> 16));
     hitWeight = f16tof32(payload.z & 0xFFFF);
-    hitSuccessful = (payload.z << 16) & 1;
+    hitSuccessful = ((payload.z >> 16) & 1) == 0;
 }
 
 // -------------------------------------------------
@@ -675,7 +675,7 @@ ScreenSpaceRaymarchInput CreateScreenSpaceHiZRaymarchInput(
     // Jitter the ray origin to trade some noise instead of banding effect
     ssRayInput.rayOriginWS = rayOriginWS + rayDirWS * SampleBayer4(positionSS + uint2(_FrameCount, uint(_FrameCount) / 4u)) * 0.1;
     ssRayInput.rayDirWS = rayDirWS;
-#if DEBUG_DISPLAY
+#ifdef DEBUG_DISPLAY
     ssRayInput.debug = debug;
 #endif
     return ssRayInput;

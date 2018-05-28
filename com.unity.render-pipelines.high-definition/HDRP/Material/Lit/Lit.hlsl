@@ -1753,10 +1753,17 @@ IndirectLighting EvaluateBSDF_SSLighting(LightLoopContext lightLoopContext,
     }
 #endif
 
-    bool hitSuccessful = false;
-    float2 hitPositionNDC = float2(0, 0);
-    uint2 hitPositionSS = uint2(0, 0);
-    float hitWeight = 1;
+    bool hitSuccessful              = false;
+    float2 hitPositionNDC           = float2(0, 0);
+    uint2 hitPositionSS             = uint2(0, 0);
+    float hitWeight                 = 1;
+    float invScreenWeightDistance   = 0;
+    float mipLevel                  = 0;
+    int projectionModel             = PROJECTIONMODEL_NONE;
+    float temporalFilteringWeight   = 0.1;
+#ifdef DEBUG_DISPLAY
+    int debugMode                   = DEBUGLIGHTINGMODE_NONE;
+#endif
     // Raytracing occurs in lighting pass for refraction because it is rendered in forward only
 #if HAS_REFRACTION
     if (GPUImageBasedLightingType == GPUIMAGEBASEDLIGHTINGTYPE_REFRACTION)
@@ -1770,12 +1777,10 @@ IndirectLighting EvaluateBSDF_SSLighting(LightLoopContext lightLoopContext,
 
         float3 rayOriginWS              = preLightData.transparentPositionWS;
         float3 rayDirWS                 = preLightData.transparentRefractV;
-        float mipLevel                  = preLightData.transparentSSMipLevel;
-        float invScreenWeightDistance   = _SSRefractionInvScreenWeightDistance;
-        float temporalFilteringWeight   = 0.1;
+        mipLevel                        = preLightData.transparentSSMipLevel;
+        invScreenWeightDistance         = _SSRefractionInvScreenWeightDistance;
 #if DEBUG_DISPLAY
-        int debugMode                   = DEBUGLIGHTINGMODE_SCREEN_SPACE_TRACING_REFRACTION;
-        bool debug                      = _DebugLightingMode == debugMode
+        bool debug                      = _DebugLightingMode == GPUIMAGEBASEDLIGHTINGTYPE_REFRACTION
                                         && !any(int2(_MouseClickPixelCoord.xy) - int2(posInput.positionSS));
 #endif
 
@@ -1789,6 +1794,7 @@ IndirectLighting EvaluateBSDF_SSLighting(LightLoopContext lightLoopContext,
         // HiZ raymarching
         // -------------------------------
         #if defined(_REFRACTION_SSRAY_HIZ)
+        projectionModel = PROJECTIONMODEL_HI_Z;
         ScreenSpaceRaymarchInput ssRayInput = CreateScreenSpaceHiZRaymarchInput(
             rayOriginWS,
             rayDirWS,
@@ -1803,6 +1809,7 @@ IndirectLighting EvaluateBSDF_SSLighting(LightLoopContext lightLoopContext,
         // Proxy raycasting
         // -------------------------------
         #elif defined(_REFRACTION_SSRAY_PROXY)
+        projectionModel = PROJECTIONMODEL_PROXY;
         ScreenSpaceProxyRaycastInput ssRayInput = CreateScreenSpaceProxyRaycastInput(
             rayOriginWS,
             rayDirWS,
@@ -1821,13 +1828,61 @@ IndirectLighting EvaluateBSDF_SSLighting(LightLoopContext lightLoopContext,
 
         hitPositionNDC = hit.positionNDC;
         hitPositionSS = hit.positionSS;
-    }
+
+#ifdef DEBUG_DISPLAY
+        debugMode = DEBUGLIGHTINGMODE_SCREEN_SPACE_TRACING_REFRACTION;
+        if (debug)
+        {
+            ScreenSpaceTracingDebug debug = _DebugScreenSpaceTracingData[0];
+            debug.lightingSampledColor = preLD;
+            debug.lightingSpecularFGD = 1.0 - F;
+            debug.lightingWeight = weight;
+            _DebugScreenSpaceTracingData[0] = debug;
+        }
 #endif
-    else if (GPUImageBasedLightingType == GPUIMAGEBASEDLIGHTINGTYPE_REFLECTION)
+    }
+    else 
+#endif
+    if (GPUImageBasedLightingType == GPUIMAGEBASEDLIGHTINGTYPE_REFLECTION)
     {
+        projectionModel                 = _SSReflectionProjectionModel;
+        invScreenWeightDistance         = _SSReflectionInvScreenWeightDistance;
+        mipLevel                        = PositivePow(preLightData.iblPerceptualRoughness, 0.8) * uint(max(_ColorPyramidScale.z - 1, 0));
         // Read raycast results
-        uint4 payload = LOAD_TEXTURE2D_LOD(_SSReflectionRayHitTexture, posInput.positionSS, 0);
+        uint4 payload = asuint(LOAD_TEXTURE2D_LOD(_SSReflectionRayHitTexture, posInput.positionSS, 0));
         UnpackRayHit(payload, hitPositionSS, hitPositionNDC, hitWeight, hitSuccessful);
+
+#ifdef DEBUG_DISPLAY
+        debugMode = DEBUGLIGHTINGMODE_SCREEN_SPACE_TRACING_REFLECTION;
+        if (_DebugLightingMode == debugMode)
+        {
+            bool applyDebug = true;
+            float3 debugColor = float3(0, 0, 0);
+            switch (_DebugLightingSubMode)
+            {
+                case DEBUGSCREENSPACETRACING_HIT_SUCCESS:
+                    debugColor = float3(1, hitSuccessful ? 1 : 0, 0);
+                    break;
+                case DEBUGSCREENSPACETRACING_HI_ZHIT_WEIGHT:
+                    debugColor = float3(1, 1, 1) * hitWeight;
+                    break;
+                case DEBUGSCREENSPACETRACING_HI_ZPOSITION_NDC:
+                    debugColor = float3(hitPositionNDC.x, hitPositionNDC.y, 0.5);
+                    break;
+                default:
+                    applyDebug = false;
+                    break;
+            }
+
+            if (applyDebug)
+            {
+                float weight = 1.0;
+                UpdateLightingHierarchyWeights(hierarchyWeight, weight);
+                lighting.specularReflected = debugColor;
+                return lighting;
+            }
+        }
+#endif
     }
 
     if (!hitSuccessful)
@@ -1906,18 +1961,6 @@ IndirectLighting EvaluateBSDF_SSLighting(LightLoopContext lightLoopContext,
         lighting.specularReflected = F * preLD.rgb * weight;
 
 #ifdef DEBUG_DISPLAY
-    if (debug)
-    {
-        ScreenSpaceTracingDebug debug = _DebugScreenSpaceTracingData[0];
-        debug.lightingSampledColor = preLD;
-        if (GPUImageBasedLightingType == GPUIMAGEBASEDLIGHTINGTYPE_REFRACTION)
-            debug.lightingSpecularFGD = 1.0 - F;
-        else if (GPUImageBasedLightingType == GPUIMAGEBASEDLIGHTINGTYPE_REFLECTION)
-            debug.lightingSpecularFGD = F;
-        debug.lightingWeight = weight;
-        _DebugScreenSpaceTracingData[0] = debug;
-    }
-
     if (_DebugLightingMode == debugMode
         && (_DebugLightingSubMode == DEBUGSCREENSPACETRACING_LINEAR_SAMPLED_COLOR
             || _DebugLightingSubMode == DEBUGSCREENSPACETRACING_HI_ZSAMPLED_COLOR))
