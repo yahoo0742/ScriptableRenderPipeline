@@ -702,7 +702,6 @@ bool ScreenSpaceHiZRaymarch(
     uint iteration = 0u;
     int minMipLevel = max(settingsRayMinLevel, 0u);
     int maxMipLevel = min(settingsRayMaxLevel, uint(_DepthPyramidScale.z));
-    uint2 bufferSize = uint2(_DepthPyramidSize.xy);
     uint maxIterations = settingsRayMaxIterations;
 
     float3 startPositionSS;
@@ -711,7 +710,7 @@ bool ScreenSpaceHiZRaymarch(
     CalculateRaySS(
         input.rayOriginWS,
         input.rayDirWS,
-        bufferSize,
+        uint2(_DepthPyramidSize.xy),
         startPositionSS,
         raySS,
         rayEndDepth
@@ -850,7 +849,7 @@ bool ScreenSpaceHiZRaymarch(
         raySS.xy        *= (1 << currentLevel);
 
         currentLevel = min(currentLevel + mipLevelDelta, maxMipLevel);
-        float4 distancesToBorders = float4(positionSS.xy, bufferSize - positionSS.xy);
+        float4 distancesToBorders = float4(positionSS.xy, _DepthPyramidSize.xy - positionSS.xy);
         float distanceToBorders = min(min(distancesToBorders.x, distancesToBorders.y), min(distancesToBorders.z, distancesToBorders.w));
         int minLevelForBorders = int(log2(distanceToBorders));
         currentLevel = min(currentLevel, minLevelForBorders);
@@ -871,7 +870,7 @@ bool ScreenSpaceHiZRaymarch(
 #endif
 
         // Check if we are out of the buffer
-        if (any(int2(positionSS.xy) > int2(bufferSize))
+        if (any(int2(positionSS.xy - _DepthPyramidSize.xy) > int2(0, 0))
             || any(positionSS.xy < 0))
         {
             hitSuccessful = false;
@@ -883,7 +882,7 @@ bool ScreenSpaceHiZRaymarch(
 
     hit.linearDepth = positionLinearDepth;
     hit.positionSS = uint2(positionSS.xy);
-    hit.positionNDC = float2(hit.positionSS) / float2(bufferSize);
+    hit.positionNDC = float2(hit.positionSS) / _DepthPyramidSize.xy;
 
     // Detect when we go behind an object given a thickness
 
