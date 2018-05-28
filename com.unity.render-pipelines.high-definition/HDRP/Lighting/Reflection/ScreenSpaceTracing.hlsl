@@ -186,16 +186,15 @@ float3 IntersectDepthPlane(float3 positionSS, float3 raySS, float invDepth)
 
 float2 CalculateDistanceToCellPlanes(
     float3 positionSS,              // Ray Origin (Screen Space, 1/LinearDepth)
-    float2 invRaySS,                // 1/RayDirection
+    float3 raySS,                   // Ray Direction (Screen Space, 1/LinearDepth)
     int2 cellId,                    // (Row, Colum) of the cell
-    uint2 cellSize,                 // Size of the cell in pixel
     int2 cellPlanes                 // Planes to intersect (one of (0,0), (1, 0), (0, 1), (1, 1))
 )
 {
     // Planes to check
-    int2 planes = (cellId + cellPlanes) * cellSize;
+    int2 planes = (cellId + cellPlanes);
     // Hit distance to each planes
-    float2 distanceToCellAxes = float2(planes - positionSS.xy) * invRaySS; // (distance to x axis, distance to y axis)
+    float2 distanceToCellAxes = float2(planes - positionSS.xy) / raySS.xy; // (distance to x axis, distance to y axis)
     return distanceToCellAxes;
 }
 
@@ -203,18 +202,15 @@ float2 CalculateDistanceToCellPlanes(
 float3 IntersectCellPlanes(
     float3 positionSS,              // Ray Origin (Screen Space, 1/LinearDepth)
     float3 raySS,                   // Ray Direction (Screen Space, 1/LinearDepth)
-    float2 invRaySS,                // 1/RayDirection
     int2 cellId,                    // (Row, Colum) of the cell
-    uint2 cellSize,                 // Size of the cell in pixel
     int2 cellPlanes,                // Planes to intersect (one of (0,0), (1, 0), (0, 1), (1, 1))
     float2 crossOffset              // Offset to use to ensure cell boundary crossing
 )
 {
     float2 distanceToCellAxes = CalculateDistanceToCellPlanes(
         positionSS,
-        invRaySS,
+        raySS,
         cellId,
-        cellSize,
         cellPlanes
     );
 
@@ -739,7 +735,6 @@ bool ScreenSpaceHiZRaymarch(
     float raySSLength = length(raySS.xy);
     raySS /= raySSLength;
     // Initialize raymarching
-    float2 invRaySS = float2(1, 1) / raySS.xy;
 
     // Calculate planes to intersect for each cell
     int2 cellPlanes = sign(raySS.xy);
@@ -747,8 +742,6 @@ bool ScreenSpaceHiZRaymarch(
     cellPlanes = clamp(cellPlanes, 0, 1);
 
     int currentLevel = minMipLevel;
-    uint2 cellCount = bufferSize >> currentLevel;
-    uint2 cellSize = uint2(1, 1) << currentLevel;
 
     float3 positionSS = startPositionSS;
     float2 invLinearDepth = float2(0.0, 0.0);
@@ -764,9 +757,8 @@ bool ScreenSpaceHiZRaymarch(
 
         float2 distanceToCellAxes = CalculateDistanceToCellPlanes(
             positionSS,
-            invRaySS,
-            int2(positionSS.xy) / cellSize,
-            cellSize,
+            raySS,
+            int2(positionSS.xy / (1 << currentLevel)),
             cellPlanes
         );
 
@@ -784,10 +776,6 @@ bool ScreenSpaceHiZRaymarch(
             break;
         }
 
-        cellCount = bufferSize >> currentLevel;
-        cellSize = uint2(1, 1) << currentLevel;
-
-
 #ifdef DEBUG_DISPLAY
         // Fetch pre iteration debug values
         if (input.debug && _DebugStep >= int(iteration))
@@ -798,7 +786,10 @@ bool ScreenSpaceHiZRaymarch(
         int mipLevelDelta = -1;
 
         // Sampled as 1/Z so it interpolate properly in screen space.
-        invLinearDepth = LoadInvDepth(positionSS.xy, currentLevel);
+        invLinearDepth =  LoadInvDepth(positionSS.xy, currentLevel);
+
+        positionSS.xy   /= (1 << currentLevel);
+        raySS.xy        /= (1 << currentLevel);
 
         positionLinearDepth                 = 1 / positionSS.z;
         minLinearDepth                      = 1 / invLinearDepth.r;
@@ -817,8 +808,8 @@ bool ScreenSpaceHiZRaymarch(
 
             intersectionKind = HIZINTERSECTIONKIND_DEPTH;
 
-            const int2 cellId = int2(positionSS.xy) / cellSize;
-            const int2 candidateCellId = int2(candidatePositionSS.xy) / cellSize;
+            const int2 cellId = int2(positionSS.xy);
+            const int2 candidateCellId = int2(candidatePositionSS.xy);
 
             // If we crossed the current cell
             if (!CellAreEquals(cellId, candidateCellId))
@@ -826,9 +817,7 @@ bool ScreenSpaceHiZRaymarch(
                 candidatePositionSS = IntersectCellPlanes(
                     positionSS,
                     raySS,
-                    invRaySS,
                     cellId,
-                    cellSize,
                     cellPlanes,
                     crossOffset
                 );
@@ -844,14 +833,10 @@ bool ScreenSpaceHiZRaymarch(
         // Raymarching behind object in depth buffer, this case degenerate into a linear search
         else if (settingsRayMarchBehindObjects && isBehindDepth && currentLevel <= (minMipLevel + 1))
         {
-            const int2 cellId = int2(positionSS.xy) / cellSize;
-
             positionSS = IntersectCellPlanes(
                 positionSS,
                 raySS,
-                invRaySS,
-                cellId,
-                cellSize,
+                int2(positionSS.xy),
                 cellPlanes,
                 crossOffset
             );
@@ -860,6 +845,9 @@ bool ScreenSpaceHiZRaymarch(
 
             mipLevelDelta = 1;
         }
+
+        positionSS.xy   *= (1 << currentLevel);
+        raySS.xy        *= (1 << currentLevel);
 
         currentLevel = min(currentLevel + mipLevelDelta, maxMipLevel);
         float4 distancesToBorders = float4(positionSS.xy, bufferSize - positionSS.xy);
@@ -878,7 +866,7 @@ bool ScreenSpaceHiZRaymarch(
             debugIterationLinearDepthBufferMax = 1 / invLinearDepth.g;
             debugIteration = iteration;
             debugIterationIntersectionKind = intersectionKind;
-            debugIterationCellSize = cellSize;
+            debugIterationCellSize = int2(1, 1) << currentLevel;
         }
 #endif
 
