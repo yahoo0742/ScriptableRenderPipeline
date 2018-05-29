@@ -4,6 +4,9 @@
 #define GROUP_SIZE_2D (GROUP_SIZE_1D * GROUP_SIZE_1D)
 #define WAVEFRONT_SIZE 64
 
+#define LOAD_DEVICE_DEPTH(positionSS, level) LoadDeviceDepth(positionSS, level)
+float LoadDeviceDepth(uint2 positionSS, int level);
+
 #define LIGHTLOOP_TILE_PASS 1
 // deferred opaque always use FPTL
 #define USE_FPTL_LIGHTLIST 1
@@ -13,7 +16,6 @@
 #pragma kernel KCastRays_Proxy              KNAME=KCastRays_Proxy           PROJECTIONMODEL=PROJECTIONMODEL_PROXY
 #pragma kernel KCastRays_Debug_HiZ          KNAME=KCastRays_Debug_HiZ       PROJECTIONMODEL=PROJECTIONMODEL_HI_Z     DEBUG_DISPLAY
 #pragma kernel KCastRays_Debug_Proxy        KNAME=KCastRays_Debug_Proxy     PROJECTIONMODEL=PROJECTIONMODEL_PROXY    DEBUG_DISPLAY
-
 
 #include "CoreRP/ShaderLibrary/Common.hlsl"
 #include "CoreRP/ShaderLibrary/GeometricTools.hlsl"
@@ -26,9 +28,6 @@
 #include "HDRP/Material/Lit/Lit.cs.hlsl"
 #include "HDRP/Lighting/LightDefinition.cs.hlsl"
 #include "HDRP/Lighting/Reflection/VolumeProjection.hlsl"
-// #define SSRTID Reflection
-// #include "HDRP/Lighting/Reflection/ScreenSpaceTracing.hlsl"
-// #undef SSRTID
 
 RW_TEXTURE2D(uint4, _SSReflectionRayHitNextTexture);
 #ifdef SHADOWS_SHADOWMASK
@@ -40,6 +39,44 @@ float4 _SSReflectionRayHitNextSize;             // (x,y) = Actual Pixel Size, (z
 float4 _SSReflectionRayHitNextScale;            // (x,y) = Screen Scale, z = lod count, w = unused
 CBUFFER_END
 
+#define LDS_MIP_COUNT 5
+#define LDS_MIP_LINELENGTH 16
+#define LDS_MIP_STORAGE 64
+groupshared uint4 DepthRects[LDS_MIP_COUNT];
+groupshared float Depth00[LDS_MIP_STORAGE];
+groupshared float Depth01[LDS_MIP_STORAGE];
+groupshared float Depth02[LDS_MIP_STORAGE];
+groupshared float Depth03[LDS_MIP_STORAGE];
+groupshared float Depth04[LDS_MIP_STORAGE];
+//groupshared float Depth05[LDS_MIP_STORAGE];
+//groupshared float Depth06[LDS_MIP_STORAGE];
+
+float LoadDeviceDepth(uint2 positionSS, int level)
+{
+    if (level < 1)
+    {
+        uint4 rects = DepthRects[level];
+        if (all(positionSS.xy > rects.xy) && all(positionSS.xy < rects.zw))
+        {
+            uint2 relPositionSS = positionSS - rects.xy;
+            // uint2 waveThreadCoord = relPositionSS >> 1;
+            // uint storeCoord = waveThreadCoord.y * LDS_MIP_LINELENGTH + waveThreadCoord.x + ((relPositionSS.x & 1) + (relPositionSS.y & 1) * 2);
+            uint storeCoord = relPositionSS.y * LDS_MIP_LINELENGTH + LDS_MIP_LINELENGTH.x;
+            switch (level)
+            {
+                case 0: return Depth00[storeCoord];
+                case 1: return Depth01[storeCoord];
+                case 2: return Depth02[storeCoord];
+                case 3: return Depth03[storeCoord];
+                case 4: return Depth04[storeCoord];
+                // case 5: return Depth05[storeCoord];
+                // case 6: return Depth06[storeCoord];
+                default: break;
+            }
+        }
+    }
+    return LOAD_TEXTURE2D_LOD(_DepthPyramidTexture, positionSS >> level, level).x;
+}
 
 [numthreads(GROUP_SIZE_2D, 1, 1)]
 void KNAME(
@@ -52,16 +89,16 @@ void KNAME(
     // We have only one wavefront for a group size of 8
 #if GROUP_SIZE_1D == 8
     uint waveIndex              = 0;
-    uint2 waveCoord             = uint2(0, 0);
+    uint2 waveCoord             = uint2(0, 0) * GROUP_SIZE_1D;
 #else
     uint waveIndex              = WaveReadFirstLane(groupThreadId / WAVEFRONT_SIZE);
-    uint2 waveCoord             = DecodeMorton2D(waveIndex);
+    uint2 waveCoord             = DecodeMorton2D(waveIndex) * GROUP_SIZE_1D;
 #endif
-    uint waveThreadIndex        = groupThreadId % WAVEFRONT_SIZE;
 
     uint2 groupOffset           = groupId * GROUP_SIZE_1D;
-    uint2 waveOffset            = groupOffset + waveCoord * GROUP_SIZE_1D;
-    uint2 pixelCoord            = waveOffset + DecodeMorton2D(groupThreadId);
+    uint2 waveOffset            = groupOffset + waveCoord;
+    uint2 waveThreadCoord       = DecodeMorton2D(groupThreadId);
+    uint2 pixelCoord            = waveOffset + waveThreadCoord;
 
     uint2 tileCoord         = uint2(0, 0);
     uint  featureFlags      = UINT_MAX;
@@ -71,12 +108,44 @@ void KNAME(
     // -------------------------------
     // Load Depth Pyramid in LDS
     // -------------------------------
-    // float depth = LOAD_TEXTURE2D_LOD(_DepthPyramidTexture, pixelCoord.xy, 0).x;
+    const uint2 d = uint2(0, 1);
+
+#define LOAD_DEPTH_LDS(mip)\
+    {\
+        uint2 topLeftCoord = (groupOffset << mip) - 4;\
+        uint2 loadCoord = topLeftCoord + waveThreadCoord << 1;\
+        uint storeCoord = waveThreadCoord.y * LDS_MIP_LINELENGTH + waveThreadCoord.x;\
+        float d00 = LOAD_TEXTURE2D_LOD(_DepthPyramidTexture, loadCoord + d.xx, mip).r;\
+        float d10 = LOAD_TEXTURE2D_LOD(_DepthPyramidTexture, loadCoord + d.yx, mip).r;\
+        float d01 = LOAD_TEXTURE2D_LOD(_DepthPyramidTexture, loadCoord + d.xy, mip).r;\
+        float d11 = LOAD_TEXTURE2D_LOD(_DepthPyramidTexture, loadCoord + d.yy, mip).r;\
+        MERGE_NAME(Depth, mip)[storeCoord + 0] = d00;\
+        MERGE_NAME(Depth, mip)[storeCoord + 1] = d10;\
+        MERGE_NAME(Depth, mip)[storeCoord + LDS_MIP_LINELENGTH + 0] = d01;\
+        MERGE_NAME(Depth, mip)[storeCoord + LDS_MIP_LINELENGTH + 1] = d11;\
+\
+        if (groupThreadId == mip)\
+            DepthRects[mip] = uint4(topLeftCoord, topLeftCoord + LDS_MIP_LINELENGTH);\
+    }
+
+    LOAD_DEPTH_LDS(00);
+    LOAD_DEPTH_LDS(01);
+    LOAD_DEPTH_LDS(02);
+    LOAD_DEPTH_LDS(03);
+    LOAD_DEPTH_LDS(04);
+    // LOAD_DEPTH_LDS(05);
+    // LOAD_DEPTH_LDS(06);
+
+#undef LOAD_DEPTH_LDS
+
+    GroupMemoryBarrierWithGroupSync();
 
     // -------------------------------
     // Decode pixel data
     // -------------------------------
-    float depth = LOAD_TEXTURE2D(_DepthPyramidTexture, pixelCoord.xy).x;
+    float depth = LoadDeviceDepth(pixelCoord, 0);
+
+    // float depth = LOAD_TEXTURE2D_LOD(_DepthPyramidTexture, pixelCoord, 0).r;
     PositionInputs posInput = GetPositionInput(pixelCoord.xy, _ScreenSize.zw, depth, UNITY_MATRIX_I_VP, UNITY_MATRIX_V, tileCoord);
 
     float3 V = GetWorldSpaceNormalizeViewDir(posInput.positionWS);

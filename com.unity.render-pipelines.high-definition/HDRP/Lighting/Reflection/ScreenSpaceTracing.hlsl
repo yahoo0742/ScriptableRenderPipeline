@@ -145,19 +145,29 @@ void CalculateRaySS(
     raySS = rayEndSS - rayStartSS;
 }
 
+#ifndef LOAD_DEVICE_DEPTH
+#define UNDEF_LOAD_DEVICE_DEPTH
+#define LOAD_DEVICE_DEPTH(positionSS, level) LOAD_TEXTURE2D_LOD(_DepthPyramidTexture, positionSS >> level, level).r;
+#endif
+
 // Sample the Depth buffer at a specific mip and return 1/linear depth
-float2 LoadInvDepth(float2 positionSS, int level)
+float LoadInvDepth(float2 positionSS, int level)
 {
-    float2 invDeviceDepth = LOAD_TEXTURE2D_LOD(_DepthPyramidTexture, int2(positionSS.xy) >> level, level).rg;
-    float2 invLinearDepth = _ZBufferParams.zz * invDeviceDepth.xy + _ZBufferParams.ww;
+    float invDeviceDepth = LOAD_DEVICE_DEPTH(int2(positionSS.xy), level);
+    float invLinearDepth = _ZBufferParams.z * invDeviceDepth + _ZBufferParams.w;
     return invLinearDepth;
 }
 
+#ifdef UNDEF_LOAD_DEVICE_DEPTH
+#undef UNDEF_LOAD_DEVICE_DEPTH
+#undef LOAD_DEVICE_DEPTH
+#endif
+
 // Sample the Depth buffer at a specific mip and linear depth
-float2 LoadDepth(float2 positionSS, int level)
+float LoadDepth(float2 positionSS, int level)
 {
-    float2 invLinearDepth = LoadInvDepth(positionSS, level);
-    float2 linearDepth = 1.0 / linearDepth;
+    float invLinearDepth = LoadInvDepth(positionSS, level);
+    float linearDepth = 1.0 / linearDepth;
     return linearDepth;
 }
 
@@ -345,7 +355,7 @@ bool ScreenSpaceLinearRaymarch(
     float debugIterationLinearDepthBufferMax = 0;
 #endif
 
-    float2 invLinearDepth = float2(0.0, 0.0);
+    float invLinearDepth = 0.0;
 
     float minLinearDepth                = 0;
     float minLinearDepthWithThickness   = 0;
@@ -358,7 +368,7 @@ bool ScreenSpaceLinearRaymarch(
         // Sampled as 1/Z so it interpolate properly in screen space.
         invLinearDepth = LoadInvDepth(positionSS.xy, mipLevel);
 
-        minLinearDepth                  = 1 / invLinearDepth.r;
+        minLinearDepth                  = 1 / invLinearDepth;
         minLinearDepthWithThickness     = minLinearDepth + settingsDepthBufferThickness;
         positionLinearDepth             = 1 / positionSS.z;
         bool isAboveDepth               = positionLinearDepth < minLinearDepth;
@@ -373,7 +383,6 @@ bool ScreenSpaceLinearRaymarch(
             debugIterationPositionSS                        = positionSS;
             debugIterationLinearDepthBufferMin              = minLinearDepth;
             debugIterationLinearDepthBufferMinThickness     = minLinearDepthWithThickness;
-            debugIterationLinearDepthBufferMax              = 1 / invLinearDepth.g;
             debugIteration                                  = iteration;
         }
 #endif
@@ -743,7 +752,7 @@ bool ScreenSpaceHiZRaymarch(
     int currentLevel = minMipLevel;
 
     float3 positionSS = startPositionSS;
-    float2 invLinearDepth = float2(0.0, 0.0);
+    float invLinearDepth = 0.0;
 
     float positionLinearDepth           = 0;
     float minLinearDepth                = 0;
@@ -791,7 +800,7 @@ bool ScreenSpaceHiZRaymarch(
         raySS.xy                            /= (1 << currentLevel);
 
         positionLinearDepth                 = 1 / positionSS.z;
-        minLinearDepth                      = 1 / invLinearDepth.r;
+        minLinearDepth                      = 1 / invLinearDepth;
         minLinearDepthWithThickness         = minLinearDepth + settingsDepthBufferThickness;
         bool isAboveDepth                   = positionLinearDepth < minLinearDepth;
         bool isAboveThickness               = positionLinearDepth < minLinearDepthWithThickness;
@@ -802,7 +811,7 @@ bool ScreenSpaceHiZRaymarch(
         // Nominal case, we raymarch in front of the depth buffer and accelerate with HiZ
         if (isAboveDepth)
         {
-            float3 candidatePositionSS = IntersectDepthPlane(positionSS, raySS, invLinearDepth.r);
+            float3 candidatePositionSS = IntersectDepthPlane(positionSS, raySS, invLinearDepth);
 
             intersectionKind = HIZINTERSECTIONKIND_DEPTH;
 
@@ -859,9 +868,8 @@ bool ScreenSpaceHiZRaymarch(
         {
             debugLoopMipMaxUsedLevel = max(debugLoopMipMaxUsedLevel, currentLevel);
             debugIterationPositionSS = positionSS;
-            debugIterationLinearDepthBufferMin = 1 / invLinearDepth.r;
-            debugIterationLinearDepthBufferMinThickness = 1 / invLinearDepth.r + settingsDepthBufferThickness;
-            debugIterationLinearDepthBufferMax = 1 / invLinearDepth.g;
+            debugIterationLinearDepthBufferMin = 1 / invLinearDepth;
+            debugIterationLinearDepthBufferMinThickness = 1 / invLinearDepth + settingsDepthBufferThickness;
             debugIteration = iteration;
             debugIterationIntersectionKind = intersectionKind;
             debugIterationCellSize = int2(1, 1) << currentLevel;
