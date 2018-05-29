@@ -53,7 +53,7 @@ void KNAME(
     // -------------------------------
     // Decode pixel data
     // -------------------------------
-    float depth = LOAD_TEXTURE2D(_CameraDepthTexture, pixelCoord.xy).x;
+    float depth = LOAD_TEXTURE2D(_DepthPyramidTexture, pixelCoord.xy).x;
     PositionInputs posInput = GetPositionInput(pixelCoord.xy, _ScreenSize.zw, depth, UNITY_MATRIX_I_VP, UNITY_MATRIX_V, tileCoord);
 
     float3 V = GetWorldSpaceNormalizeViewDir(posInput.positionWS);
