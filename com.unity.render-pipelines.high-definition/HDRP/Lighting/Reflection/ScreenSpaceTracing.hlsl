@@ -145,20 +145,20 @@ void CalculateRaySS(
     raySS = rayEndSS - rayStartSS;
 }
 
-// Sample the Depth buffer at a specific mip and linear depth
-float2 LoadDepth(float2 positionSS, int level)
-{
-    float2 pyramidDepth = LOAD_TEXTURE2D_LOD(_DepthPyramidTexture, int2(positionSS.xy) >> level, level).rg;
-    float2 linearDepth = float2(LinearEyeDepth(pyramidDepth.r, _ZBufferParams), LinearEyeDepth(pyramidDepth.g, _ZBufferParams));
-    return linearDepth;
-}
-
 // Sample the Depth buffer at a specific mip and return 1/linear depth
 float2 LoadInvDepth(float2 positionSS, int level)
 {
-    float2 linearDepth = LoadDepth(positionSS, level);
-    float2 invLinearDepth = 1 / linearDepth;
+    float2 invDeviceDepth = LOAD_TEXTURE2D_LOD(_DepthPyramidTexture, int2(positionSS.xy) >> level, level).rg;
+    float2 invLinearDepth = _ZBufferParams.zz * invDeviceDepth.xy + _ZBufferParams.ww;
     return invLinearDepth;
+}
+
+// Sample the Depth buffer at a specific mip and linear depth
+float2 LoadDepth(float2 positionSS, int level)
+{
+    float2 invLinearDepth = LoadInvDepth(positionSS, level);
+    float2 linearDepth = 1.0 / linearDepth;
+    return linearDepth;
 }
 
 bool CellAreEquals(int2 cellA, int2 cellB)
@@ -787,8 +787,8 @@ bool ScreenSpaceHiZRaymarch(
         // Sampled as 1/Z so it interpolate properly in screen space.
         invLinearDepth =  LoadInvDepth(positionSS.xy, currentLevel);
 
-        positionSS.xy   /= (1 << currentLevel);
-        raySS.xy        /= (1 << currentLevel);
+        positionSS.xy                       /= (1 << currentLevel);
+        raySS.xy                            /= (1 << currentLevel);
 
         positionLinearDepth                 = 1 / positionSS.z;
         minLinearDepth                      = 1 / invLinearDepth.r;
@@ -796,7 +796,6 @@ bool ScreenSpaceHiZRaymarch(
         bool isAboveDepth                   = positionLinearDepth < minLinearDepth;
         bool isAboveThickness               = positionLinearDepth < minLinearDepthWithThickness;
         isBehindDepth                       = !isAboveThickness;
-        bool intersectWithDepth             = minLinearDepth >= positionLinearDepth && isAboveThickness;
 
         intersectionKind = HIZINTERSECTIONKIND_NONE;
 

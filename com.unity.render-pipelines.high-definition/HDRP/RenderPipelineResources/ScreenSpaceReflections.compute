@@ -1,6 +1,8 @@
 #pragma only_renderers d3d11 ps4 xboxone vulkan metal switch
 
-#define GROUP_SIZE 8
+#define GROUP_SIZE_1D 8
+#define GROUP_SIZE_2D (GROUP_SIZE_1D * GROUP_SIZE_1D)
+#define WAVEFRONT_SIZE 64
 
 #define LIGHTLOOP_TILE_PASS 1
 // deferred opaque always use FPTL
@@ -16,6 +18,7 @@
 #include "CoreRP/ShaderLibrary/Common.hlsl"
 #include "CoreRP/ShaderLibrary/GeometricTools.hlsl"
 #include "CoreRP/ShaderLibrary/ImageBasedLighting.hlsl"
+#include "CoreRP/ShaderLibrary/SpaceFillingCurves.hlsl"
 #include "HDRP/ShaderVariables.hlsl"
 #include "HDRP/Debug/DebugDisplay.hlsl"
 #include "HDRP/Material/Material.hlsl"
@@ -37,18 +40,38 @@ float4 _SSReflectionRayHitNextSize;             // (x,y) = Actual Pixel Size, (z
 float4 _SSReflectionRayHitNextScale;            // (x,y) = Screen Scale, z = lod count, w = unused
 CBUFFER_END
 
-[numthreads(GROUP_SIZE, GROUP_SIZE, 1)]
+
+[numthreads(GROUP_SIZE_2D, 1, 1)]
 void KNAME(
-    uint2 groupId : SV_GroupID, 
-    uint2 groupThreadId : SV_GroupThreadID, 
-    uint2 dispatchThreadId : SV_DispatchThreadID
+    uint2 groupId       : SV_GroupID,
+    uint  groupThreadId : SV_GroupThreadID
 )
 {
-    uint2 pixelCoord   = dispatchThreadId;
-    uint2 tileCoord    = uint2(0, 0);
-    uint  featureFlags = UINT_MAX;
+    groupThreadId &= GROUP_SIZE_2D - 1;
+
+    // We have only one wavefront for a group size of 8
+#if GROUP_SIZE_1D == 8
+    uint waveIndex              = 0;
+    uint2 waveCoord             = uint2(0, 0);
+#else
+    uint waveIndex              = WaveReadFirstLane(groupThreadId / WAVEFRONT_SIZE);
+    uint2 waveCoord             = DecodeMorton2D(waveIndex);
+#endif
+    uint waveThreadIndex        = groupThreadId % WAVEFRONT_SIZE;
+
+    uint2 groupOffset           = groupId * GROUP_SIZE_1D;
+    uint2 waveOffset            = groupOffset + waveCoord * GROUP_SIZE_1D;
+    uint2 pixelCoord            = waveOffset + DecodeMorton2D(groupThreadId);
+
+    uint2 tileCoord         = uint2(0, 0);
+    uint  featureFlags      = UINT_MAX;
     EnvLightData envLightData;
     ZERO_INITIALIZE(EnvLightData, envLightData);
+
+    // -------------------------------
+    // Load Depth Pyramid in LDS
+    // -------------------------------
+    // float depth = LOAD_TEXTURE2D_LOD(_DepthPyramidTexture, pixelCoord.xy, 0).x;
 
     // -------------------------------
     // Decode pixel data
@@ -119,5 +142,5 @@ void KNAME(
     uint4 payload = uint4(0, 0, 0, 0);
     PackRayHit(hit.positionSS, hit.positionNDC, hitWeight, hitSuccessful, payload);
 
-    _SSReflectionRayHitNextTexture[dispatchThreadId] = payload;
+    _SSReflectionRayHitNextTexture[pixelCoord] = payload;
 }

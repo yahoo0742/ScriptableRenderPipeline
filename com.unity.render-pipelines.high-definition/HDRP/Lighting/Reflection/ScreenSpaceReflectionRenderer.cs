@@ -14,6 +14,7 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
             public static readonly int _SSReflectionRayHitNextTexture       = Shader.PropertyToID("_SSReflectionRayHitNextTexture");
             public static readonly int _SSReflectionRayHitNextSize          = Shader.PropertyToID("_SSReflectionRayHitNextSize");
             public static readonly int _SSReflectionRayHitNextScale         = Shader.PropertyToID("_SSReflectionRayHitNextScale");
+            public const int KCastRay_KernelSize = 8;
 
             Vector3Int[]         m_KCastRays_NumThreads;
             int[]                m_KCastRays;
@@ -119,10 +120,10 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
 
             var projectionModel     = (Lit.ProjectionModel)ssReflection.deferredProjectionModel.value;
             var kernel              = m_Kernels.GetKCastRays(projectionModel, debug);
-            var numthreads          = m_Kernels.GetKCastRays_NumThreads(projectionModel, debug);
             var threadGroups        = new Vector3Int(
-                                        Mathf.CeilToInt(hdCamera.actualWidth / (float)numthreads.x),
-                                        Mathf.CeilToInt(hdCamera.actualHeight / (float)numthreads.y),
+                                        // We use 8x8 kernel for KCastRays
+                                        (int)((hdCamera.actualWidth + CSMeta.KCastRay_KernelSize - 1) / (float)CSMeta.KCastRay_KernelSize),
+                                        (int)((hdCamera.actualHeight + CSMeta.KCastRay_KernelSize - 1) / (float)CSMeta.KCastRay_KernelSize),
                                         1
                                     );
 
