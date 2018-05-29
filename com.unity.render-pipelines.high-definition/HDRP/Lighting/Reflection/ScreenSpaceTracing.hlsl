@@ -276,7 +276,7 @@ float SampleBayer4(uint2 positionSS)
                                          3,  11, 1,  9,
                                          15, 7,  13, 5) / 16;
 
-    return Bayer4[positionSS.x % 4][positionSS.y % 4];
+    return Bayer4[positionSS.x & 0x3][positionSS.y & 0x3];
 }
 
 void PackRayHit(uint2 hitPositionSS, float2 hitPositionNDC, float hitWeight, bool hitSuccessful, out uint4 payload)
@@ -790,13 +790,9 @@ bool ScreenSpaceHiZRaymarch(
         positionSS.xy   /= (1 << currentLevel);
         raySS.xy        /= (1 << currentLevel);
 
-        positionLinearDepth                 = 1 / positionSS.z;
-        minLinearDepth                      = 1 / invLinearDepth.r;
-        minLinearDepthWithThickness         = minLinearDepth + settingsDepthBufferThickness;
-        bool isAboveDepth                   = positionLinearDepth < minLinearDepth;
-        bool isAboveThickness               = positionLinearDepth < minLinearDepthWithThickness;
+        bool isAboveDepth                   = positionSS.z > invLinearDepth.r;
+        bool isAboveThickness               = positionSS.z > invLinearDepth.r / (invLinearDepth.r + settingsDepthBufferThickness);
         isBehindDepth                       = !isAboveThickness;
-        bool intersectWithDepth             = minLinearDepth >= positionLinearDepth && isAboveThickness;
 
         intersectionKind = HIZINTERSECTIONKIND_NONE;
 
@@ -880,7 +876,7 @@ bool ScreenSpaceHiZRaymarch(
         ++iteration;
     }
 
-    hit.linearDepth = positionLinearDepth;
+    hit.linearDepth = 1 / positionSS.z;
     hit.positionSS = uint2(positionSS.xy);
     hit.positionNDC = float2(hit.positionSS) / _DepthPyramidSize.xy;
 
