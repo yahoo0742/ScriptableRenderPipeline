@@ -276,7 +276,7 @@ float SampleBayer4(uint2 positionSS)
                                          3,  11, 1,  9,
                                          15, 7,  13, 5) / 16;
 
-    return Bayer4[positionSS.x % 4][positionSS.y % 4];
+    return Bayer4[positionSS.x & 0x3][positionSS.y & 0x3];
 }
 
 void PackRayHit(uint2 hitPositionSS, float2 hitPositionNDC, float hitWeight, bool hitSuccessful, out uint4 payload)
