@@ -18,6 +18,9 @@ float LoadDeviceDepth(uint2 positionSS, int level);
 #pragma kernel KCastRays_Debug_Proxy        KNAME=KCastRays_Debug_Proxy     PROJECTIONMODEL=PROJECTIONMODEL_PROXY    DEBUG_DISPLAY
 
 #include "CoreRP/ShaderLibrary/Common.hlsl"
+#ifdef DEBUG_DISPLAY
+#include "CoreRP/ShaderLibrary/Debug.hlsl"
+#endif
 #include "CoreRP/ShaderLibrary/GeometricTools.hlsl"
 #include "CoreRP/ShaderLibrary/ImageBasedLighting.hlsl"
 #include "CoreRP/ShaderLibrary/SpaceFillingCurves.hlsl"
@@ -43,46 +46,44 @@ float4 _SSReflectionRayHitNextScale;            // (x,y) = Screen Scale, z = lod
 
 #ifdef DEBUG_DISPLAY
 int     _SSRDebugMode;
-int2    _SSRDebugGroupID;
 int     _SSRDebugMip;
 #endif
 CBUFFER_END
 
-#define LDS_MIP_COUNT 5
-#define LDS_MIP_LINELENGTH 8
-#define LDS_MIP_STORAGE GROUP_SIZE_2D
-groupshared uint DepthRects[LDS_MIP_COUNT];
-groupshared float Depth[LDS_MIP_STORAGE * LDS_MIP_COUNT];
+#define LDS_MIP_COUNT 3
+#define LDS_MIP_LINELENGTH GROUP_SIZE_1D
+// we store 16x16 pixels and compress two float in one, so storage is (GROUP_SIZE_2D * 4) / 2
+#define LDS_MIP_STORAGE (GROUP_SIZE_2D * 2)
+groupshared uint Depth[LDS_MIP_STORAGE * LDS_MIP_COUNT];
+groupshared int4 DepthRects[LDS_MIP_COUNT];
 
 void Store4(uint2 ldsMipCoord, int lod, float p00, float p10, float p01, float p11)
 {
-    ldsMipCoord = ldsMipCoord >> 1;
-    uint i0x = (ldsMipCoord.y * LDS_MIP_LINELENGTH + ldsMipCoord.x) + lod * LDS_MIP_STORAGE;
+    uint i0x = (ldsMipCoord.y * LDS_MIP_LINELENGTH + (ldsMipCoord.x >> 1)) + lod * LDS_MIP_STORAGE;
     uint i1x = i0x + LDS_MIP_LINELENGTH;
     Depth[i0x] = f32tof16(p00) | (f32tof16(p10) << 16);
     Depth[i1x] = f32tof16(p01) | (f32tof16(p11) << 16);
 }
 
-float Load1(uint2 ldsMipCoord, int lod)
+float Load1(int2 ldsMipCoord, int lod)
 {
     uint index = (ldsMipCoord.y * LDS_MIP_LINELENGTH + (ldsMipCoord.x >> 1)) + lod * LDS_MIP_STORAGE;
     uint payload = Depth[index];
     float p1 = f16tof32(payload);
     float p2 = f16tof32(payload >> 16);
     float mask = (ldsMipCoord.x & 1);
-    return (p1 * (1-mask)) + p2 * mask;
+    return mask == 1 ? p2 : p1;
 }
 
 bool LoadDeviceDepthFromLDS(uint2 positionTXS, int lod, out float deviceDepth)
 {
-    UNITY_BRANCH
     if (lod < LDS_MIP_COUNT)
     {
-        uint4 rects = DepthRects[lod];
-        if (all(positionTXS.xy > rects.xy) && all(positionTXS.xy < rects.zw))
+        int4 rects = DepthRects[lod];
+        rects = int4(int2(positionTXS) - rects.xy, rects.zw - int2(positionTXS));
+        if (all(rects >= 0))
         {
-            uint2 ldsMipCoord = positionTXS - rects.xy;
-            deviceDepth = Load1(ldsMipCoord, lod);
+            deviceDepth = Load1(rects.xy, lod);
             return true;
         }
     }
@@ -90,13 +91,16 @@ bool LoadDeviceDepthFromLDS(uint2 positionTXS, int lod, out float deviceDepth)
     return false;
 }
 
-float LoadDeviceDepth(uint2 positionSS, int level)
+float LoadDeviceDepth(uint2 positionTXS, int lod)
 {
-    float depth;
-    if (LoadDeviceDepthFromLDS(positionSS, level, depth))
+    positionTXS = positionTXS >> lod;
+    float depth = 0;
+
+    UNITY_BRANCH
+    if (LoadDeviceDepthFromLDS(positionTXS, lod, depth))
         return depth;
 
-    return LOAD_TEXTURE2D_LOD(_DepthPyramidTexture, positionSS >> level, level).x;
+    return LOAD_TEXTURE2D_LOD(_DepthPyramidTexture, positionTXS, lod).x;
 }
 
 [numthreads(GROUP_SIZE_2D, 1, 1)]
@@ -121,9 +125,11 @@ void KNAME(
     // -------------------------------
     const uint2 d = uint2(0, 1);
 
+    // Load 16x16 pixels centered on the 8x8 wavefront
+    // Each thread load 4 pixels into LDS
 #define LOAD_DEPTH_LDS(mip)\
     {\
-        uint2 srcMipGroupCoord  = (groupCoord << mip) - 4;\
+        int2 srcMipGroupCoord   = int2(groupCoord >> mip) - 4;\
         uint2 ldsMipCoord       = (groupThreadCoord << 1);\
         uint2 srcMipCoord       = srcMipGroupCoord + ldsMipCoord;\
         float d00               = LOAD_TEXTURE2D_LOD(_DepthPyramidTexture, srcMipCoord + d.xx, mip).r;\
@@ -133,27 +139,25 @@ void KNAME(
         Store4(ldsMipCoord, mip, d00, d10, d01, d11);\
 \
         if (groupThreadId == mip)\
-            DepthRects[mip] = uint4(srcMipGroupCoord, srcMipGroupCoord + LDS_MIP_LINELENGTH);\
+            DepthRects[mip] = int4(max(srcMipGroupCoord, int2(0, 0)), srcMipGroupCoord + LDS_MIP_LINELENGTH * 2);\
+        GroupMemoryBarrierWithGroupSync();\
     }
 
-    LOAD_DEPTH_LDS(00);
-    LOAD_DEPTH_LDS(01);
-    LOAD_DEPTH_LDS(02);
-    LOAD_DEPTH_LDS(03);
-    LOAD_DEPTH_LDS(04);
+    LOAD_DEPTH_LDS(0)
+    LOAD_DEPTH_LDS(1)
+    LOAD_DEPTH_LDS(2)
+    // LOAD_DEPTH_LDS(3)
+    // LOAD_DEPTH_LDS(4)
 
 #undef LOAD_DEPTH_LDS
 
-    GroupMemoryBarrierWithGroupSync();
-
 #ifdef DEBUG_DISPLAY
-    uint2 groupToDebug = uint2(2, 2);
     uint mipToDebug = 0;
-    if (_SSRDebugMode == 0 && all(groupToDebug == groupId))
+    if (_SSRDebugMode == 0)
     {
         float depth;
         LoadDeviceDepthFromLDS(positionTXS >> mipToDebug, mipToDebug, depth);
-        _DebugTexture[positionTXS] = float4(depth, depth, depth, 1);
+        _DebugTexture[positionTXS] = float4(float3(1, 1, 1) * frac(LinearEyeDepth(depth, _ZBufferParams) * 0.1), 1);
     }
 #endif
 

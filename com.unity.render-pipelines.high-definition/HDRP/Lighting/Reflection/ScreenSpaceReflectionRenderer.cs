@@ -127,8 +127,8 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
             var kernel              = m_Kernels.GetKCastRays(projectionModel, debug);
             var threadGroups        = new Vector3Int(
                                         // We use 8x8 kernel for KCastRays
-                                        (int)((hdCamera.actualWidth + CSMeta.KCastRay_KernelSize - 1) / (float)CSMeta.KCastRay_KernelSize),
-                                        (int)((hdCamera.actualHeight + CSMeta.KCastRay_KernelSize - 1) / (float)CSMeta.KCastRay_KernelSize),
+                                        Mathf.CeilToInt((hdCamera.actualWidth) / (float)CSMeta.KCastRay_KernelSize),
+                                        Mathf.CeilToInt((hdCamera.actualHeight) / (float)CSMeta.KCastRay_KernelSize),
                                         1
                                     );
 
