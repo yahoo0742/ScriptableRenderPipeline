@@ -325,7 +325,7 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
             if (Debug.isDebugBuild)
             {
                 m_DebugColorPickerBuffer = RTHandles.Alloc(Vector2.one, filterMode: FilterMode.Point, colorFormat: RenderTextureFormat.ARGBHalf, sRGB: false, name: "DebugColorPicker");
-                m_DebugFullScreenTempBuffer = RTHandles.Alloc(Vector2.one, filterMode: FilterMode.Point, colorFormat: RenderTextureFormat.ARGBHalf, sRGB: false, name: "DebugFullScreen");
+                m_DebugFullScreenTempBuffer = RTHandles.Alloc(Vector2.one, filterMode: FilterMode.Point, colorFormat: RenderTextureFormat.ARGBHalf, sRGB: false, name: "DebugFullScreen", enableRandomWrite: true);
             }
         }
 
@@ -968,7 +968,15 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
                     CopyDepthBufferIfNeeded(cmd);
                     RenderDepthPyramid(hdCamera, cmd, renderContext, FullScreenDebugMode.DepthPyramid);
                     if (currentFrameSettings.enableSSR)
-                        m_ScreenSpaceReflectionRenderer.RenderPassCastRays(hdCamera, cmd, m_CurrentDebugDisplaySettings.IsDebugDisplayEnabled());
+                    {
+                        m_ScreenSpaceReflectionRenderer.RenderPassCastRays(
+                            hdCamera, 
+                            cmd, 
+                            m_CurrentDebugDisplaySettings.IsDebugDisplayEnabled(),
+                            m_DebugFullScreenTempBuffer
+                        );
+                        m_FullScreenDebugPushed = true;
+                    }
 
                     RenderCameraVelocity(m_CullResults, hdCamera, renderContext, cmd);
 
@@ -1156,7 +1164,7 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
                         }
                     }
 #endif
-                    PushFullScreenDebugTexture(hdCamera, cmd, m_CameraColorBuffer, FullScreenDebugMode.ScreenSpaceTracing);
+                    //PushFullScreenDebugTexture(hdCamera, cmd, m_CameraColorBuffer, FullScreenDebugMode.ScreenSpaceTracing);
                     // Caution: RenderDebug need to take into account that we have flip the screen (so anything capture before the flip will be flipped)
                     RenderDebug(hdCamera, cmd);
 

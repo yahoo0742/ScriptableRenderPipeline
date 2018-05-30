@@ -33,48 +33,69 @@ RW_TEXTURE2D(uint4, _SSReflectionRayHitNextTexture);
 #ifdef SHADOWS_SHADOWMASK
 TEXTURE2D(_ShadowMaskTexture);
 #endif
+#ifdef DEBUG_DISPLAY
+RW_TEXTURE2D(float4, _DebugTexture);
+#endif
 
 CBUFFER_START(UnityScreenSpaceReflections)
 float4 _SSReflectionRayHitNextSize;             // (x,y) = Actual Pixel Size, (z,w) = 1 / Actual Pixel Size
 float4 _SSReflectionRayHitNextScale;            // (x,y) = Screen Scale, z = lod count, w = unused
+
+#ifdef DEBUG_DISPLAY
+int     _SSRDebugMode;
+int2    _SSRDebugGroupID;
+int     _SSRDebugMip;
+#endif
 CBUFFER_END
 
 #define LDS_MIP_COUNT 5
-#define LDS_MIP_LINELENGTH 16
-#define LDS_MIP_STORAGE 64
-groupshared uint4 DepthRects[LDS_MIP_COUNT];
-groupshared float Depth00[LDS_MIP_STORAGE];
-groupshared float Depth01[LDS_MIP_STORAGE];
-groupshared float Depth02[LDS_MIP_STORAGE];
-groupshared float Depth03[LDS_MIP_STORAGE];
-groupshared float Depth04[LDS_MIP_STORAGE];
-//groupshared float Depth05[LDS_MIP_STORAGE];
-//groupshared float Depth06[LDS_MIP_STORAGE];
+#define LDS_MIP_LINELENGTH 8
+#define LDS_MIP_STORAGE GROUP_SIZE_2D
+groupshared uint DepthRects[LDS_MIP_COUNT];
+groupshared float Depth[LDS_MIP_STORAGE * LDS_MIP_COUNT];
+
+void Store4(uint2 ldsMipCoord, int lod, float p00, float p10, float p01, float p11)
+{
+    ldsMipCoord = ldsMipCoord >> 1;
+    uint i0x = (ldsMipCoord.y * LDS_MIP_LINELENGTH + ldsMipCoord.x) + lod * LDS_MIP_STORAGE;
+    uint i1x = i0x + LDS_MIP_LINELENGTH;
+    Depth[i0x] = f32tof16(p00) | (f32tof16(p10) << 16);
+    Depth[i1x] = f32tof16(p01) | (f32tof16(p11) << 16);
+}
+
+float Load1(uint2 ldsMipCoord, int lod)
+{
+    uint index = (ldsMipCoord.y * LDS_MIP_LINELENGTH + (ldsMipCoord.x >> 1)) + lod * LDS_MIP_STORAGE;
+    uint payload = Depth[index];
+    float p1 = f16tof32(payload);
+    float p2 = f16tof32(payload >> 16);
+    float mask = (ldsMipCoord.x & 1);
+    return (p1 * (1-mask)) + p2 * mask;
+}
+
+bool LoadDeviceDepthFromLDS(uint2 positionTXS, int lod, out float deviceDepth)
+{
+    UNITY_BRANCH
+    if (lod < LDS_MIP_COUNT)
+    {
+        uint4 rects = DepthRects[lod];
+        if (all(positionTXS.xy > rects.xy) && all(positionTXS.xy < rects.zw))
+        {
+            uint2 ldsMipCoord = positionTXS - rects.xy;
+            deviceDepth = Load1(ldsMipCoord, lod);
+            return true;
+        }
+    }
+    deviceDepth = 0;
+    return false;
+}
 
 float LoadDeviceDepth(uint2 positionSS, int level)
 {
-    if (level < 1)
-    {
-        uint4 rects = DepthRects[level];
-        if (all(positionSS.xy > rects.xy) && all(positionSS.xy < rects.zw))
-        {
-            uint2 relPositionSS = positionSS - rects.xy;
-            // uint2 waveThreadCoord = relPositionSS >> 1;
-            // uint storeCoord = waveThreadCoord.y * LDS_MIP_LINELENGTH + waveThreadCoord.x + ((relPositionSS.x & 1) + (relPositionSS.y & 1) * 2);
-            uint storeCoord = relPositionSS.y * LDS_MIP_LINELENGTH + LDS_MIP_LINELENGTH.x;
-            switch (level)
-            {
-                case 0: return Depth00[storeCoord];
-                case 1: return Depth01[storeCoord];
-                case 2: return Depth02[storeCoord];
-                case 3: return Depth03[storeCoord];
-                case 4: return Depth04[storeCoord];
-                // case 5: return Depth05[storeCoord];
-                // case 6: return Depth06[storeCoord];
-                default: break;
-            }
-        }
-    }
+    float depth;
+    if (LoadDeviceDepthFromLDS(positionSS, level, depth))
+        return depth;
+
     return LOAD_TEXTURE2D_LOD(_DepthPyramidTexture, positionSS >> level, level).x;
 }
 
@@ -86,19 +107,9 @@ void KNAME(
 {
     groupThreadId &= GROUP_SIZE_2D - 1;
 
-    // We have only one wavefront for a group size of 8
-#if GROUP_SIZE_1D == 8
-    uint waveIndex              = 0;
-    uint2 waveCoord             = uint2(0, 0) * GROUP_SIZE_1D;
-#else
-    uint waveIndex              = WaveReadFirstLane(groupThreadId / WAVEFRONT_SIZE);
-    uint2 waveCoord             = DecodeMorton2D(waveIndex) * GROUP_SIZE_1D;
-#endif
-
-    uint2 groupOffset           = groupId * GROUP_SIZE_1D;
-    uint2 waveOffset            = groupOffset + waveCoord;
-    uint2 waveThreadCoord       = DecodeMorton2D(groupThreadId);
-    uint2 pixelCoord            = waveOffset + waveThreadCoord;
+    uint2 groupCoord        = groupId * GROUP_SIZE_1D;
+    uint2 groupThreadCoord  = DecodeMorton2D(groupThreadId);
+    uint2 positionTXS       = groupCoord + groupThreadCoord;
 
     uint2 tileCoord         = uint2(0, 0);
     uint  featureFlags      = UINT_MAX;
@@ -112,20 +123,17 @@ void KNAME(
 
 #define LOAD_DEPTH_LDS(mip)\
     {\
-        uint2 topLeftCoord = (groupOffset << mip) - 4;\
-        uint2 loadCoord = topLeftCoord + waveThreadCoord << 1;\
-        uint storeCoord = waveThreadCoord.y * LDS_MIP_LINELENGTH + waveThreadCoord.x;\
-        float d00 = LOAD_TEXTURE2D_LOD(_DepthPyramidTexture, loadCoord + d.xx, mip).r;\
-        float d10 = LOAD_TEXTURE2D_LOD(_DepthPyramidTexture, loadCoord + d.yx, mip).r;\
-        float d01 = LOAD_TEXTURE2D_LOD(_DepthPyramidTexture, loadCoord + d.xy, mip).r;\
-        float d11 = LOAD_TEXTURE2D_LOD(_DepthPyramidTexture, loadCoord + d.yy, mip).r;\
-        MERGE_NAME(Depth, mip)[storeCoord + 0] = d00;\
-        MERGE_NAME(Depth, mip)[storeCoord + 1] = d10;\
-        MERGE_NAME(Depth, mip)[storeCoord + LDS_MIP_LINELENGTH + 0] = d01;\
-        MERGE_NAME(Depth, mip)[storeCoord + LDS_MIP_LINELENGTH + 1] = d11;\
+        uint2 srcMipGroupCoord  = (groupCoord << mip) - 4;\
+        uint2 ldsMipCoord       = (groupThreadCoord << 1);\
+        uint2 srcMipCoord       = srcMipGroupCoord + ldsMipCoord;\
+        float d00               = LOAD_TEXTURE2D_LOD(_DepthPyramidTexture, srcMipCoord + d.xx, mip).r;\
+        float d10               = LOAD_TEXTURE2D_LOD(_DepthPyramidTexture, srcMipCoord + d.yx, mip).r;\
+        float d01               = LOAD_TEXTURE2D_LOD(_DepthPyramidTexture, srcMipCoord + d.xy, mip).r;\
+        float d11               = LOAD_TEXTURE2D_LOD(_DepthPyramidTexture, srcMipCoord + d.yy, mip).r;\
+        Store4(ldsMipCoord, mip, d00, d10, d01, d11);\
 \
         if (groupThreadId == mip)\
-            DepthRects[mip] = uint4(topLeftCoord, topLeftCoord + LDS_MIP_LINELENGTH);\
+            DepthRects[mip] = uint4(srcMipGroupCoord, srcMipGroupCoord + LDS_MIP_LINELENGTH);\
     }
 
     LOAD_DEPTH_LDS(00);
@@ -133,29 +141,38 @@ void KNAME(
     LOAD_DEPTH_LDS(02);
     LOAD_DEPTH_LDS(03);
     LOAD_DEPTH_LDS(04);
-    // LOAD_DEPTH_LDS(05);
-    // LOAD_DEPTH_LDS(06);
 
 #undef LOAD_DEPTH_LDS
 
     GroupMemoryBarrierWithGroupSync();
 
+#ifdef DEBUG_DISPLAY
+    uint2 groupToDebug = uint2(2, 2);
+    uint mipToDebug = 0;
+    if (_SSRDebugMode == 0 && all(groupToDebug == groupId))
+    {
+        float depth;
+        LoadDeviceDepthFromLDS(positionTXS >> mipToDebug, mipToDebug, depth);
+        _DebugTexture[positionTXS] = float4(depth, depth, depth, 1);
+    }
+#endif
+
     // -------------------------------
     // Decode pixel data
     // -------------------------------
-    float depth = LoadDeviceDepth(pixelCoord, 0);
+    float depth = LoadDeviceDepth(positionTXS, 0);
 
-    // float depth = LOAD_TEXTURE2D_LOD(_DepthPyramidTexture, pixelCoord, 0).r;
-    PositionInputs posInput = GetPositionInput(pixelCoord.xy, _ScreenSize.zw, depth, UNITY_MATRIX_I_VP, UNITY_MATRIX_V, tileCoord);
+    // float depth = LOAD_TEXTURE2D_LOD(_DepthPyramidTexture, positionTXS, 0).r;
+    PositionInputs posInput = GetPositionInput(positionTXS.xy, _ScreenSize.zw, depth, UNITY_MATRIX_I_VP, UNITY_MATRIX_V, tileCoord);
 
     float3 V = GetWorldSpaceNormalizeViewDir(posInput.positionWS);
 
     BSDFData bsdfData;
     BakeLightingData bakeLightingData;
     DECODE_FROM_GBUFFER(posInput.positionSS, featureFlags, bsdfData, bakeLightingData.bakeDiffuseLighting);
-    #ifdef SHADOWS_SHADOWMASK
+#ifdef SHADOWS_SHADOWMASK
     DecodeShadowMask(LOAD_TEXTURE2D(_ShadowMaskTexture, posInput.positionSS), bakeLightingData.bakeShadowMask);
-    #endif
+#endif
 
     PreLightData preLightData = GetPreLightData(V, posInput, bsdfData);
 
@@ -211,5 +228,5 @@ void KNAME(
     uint4 payload = uint4(0, 0, 0, 0);
     PackRayHit(hit.positionSS, hit.positionNDC, hitWeight, hitSuccessful, payload);
 
-    _SSReflectionRayHitNextTexture[pixelCoord] = payload;
+    _SSReflectionRayHitNextTexture[positionTXS] = payload;
 }

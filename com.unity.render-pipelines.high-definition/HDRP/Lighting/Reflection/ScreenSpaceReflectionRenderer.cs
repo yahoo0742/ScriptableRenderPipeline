@@ -113,7 +113,12 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
             );
         }
 
-        public void RenderPassCastRays(HDCamera hdCamera, CommandBuffer cmd, bool debug)
+        public void RenderPassCastRays(
+            HDCamera hdCamera, 
+            CommandBuffer cmd, 
+            bool debug,
+            RTHandleSystem.RTHandle debugTextureHandle
+        )
         {
             var ssReflection = VolumeManager.instance.stack.GetComponent<ScreenSpaceReflection>()
                     ?? ScreenSpaceReflection.@default;
@@ -132,6 +137,16 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
                 var currentRTHRayHit = hdCamera.GetCurrentFrameRT((int)HDCameraFrameHistoryType.SSReflectionRayHit);
                 Assert.IsNotNull(currentRTHRayHit);
 
+                if (debug)
+                {
+                    cmd.SetComputeTextureParam(
+                        m_CS,
+                        kernel,
+                        HDShaderIDs._DebugTexture,
+                        debugTextureHandle
+                    );
+                }
+                
                 cmd.SetComputeRTHandleParam(
                     m_CS,
                     kernel,
