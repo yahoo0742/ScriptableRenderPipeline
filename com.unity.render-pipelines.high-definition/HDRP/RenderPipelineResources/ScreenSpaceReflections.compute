@@ -50,7 +50,9 @@ int     _SSRDebugMip;
 #endif
 CBUFFER_END
 
-#define LDS_MIP_COUNT 3
+#define LDS_MIP_MIN 1
+#define LDS_MIP_MAX 4
+#define LDS_MIP_COUNT (LDS_MIP_MAX - LDS_MIP_MIN + 1)
 #define LDS_MIP_LINELENGTH GROUP_SIZE_1D
 // we store 16x16 pixels and compress two float in one, so storage is (GROUP_SIZE_2D * 4) / 2
 #define LDS_MIP_STORAGE (GROUP_SIZE_2D * 2)
@@ -77,8 +79,9 @@ float Load1(int2 ldsMipCoord, int lod)
 
 bool LoadDeviceDepthFromLDS(uint2 positionTXS, int lod, out float deviceDepth)
 {
-    if (lod < LDS_MIP_COUNT)
+    if (lod >= LDS_MIP_MIN && lod <= LDS_MIP_MAX)
     {
+        lod -= LDS_MIP_MIN;
         int4 rects = DepthRects[lod];
         rects = int4(int2(positionTXS) - rects.xy, rects.zw - int2(positionTXS));
         if (all(rects >= 0))
@@ -136,27 +139,26 @@ void KNAME(
         float d10               = LOAD_TEXTURE2D_LOD(_DepthPyramidTexture, srcMipCoord + d.yx, mip).r;\
         float d01               = LOAD_TEXTURE2D_LOD(_DepthPyramidTexture, srcMipCoord + d.xy, mip).r;\
         float d11               = LOAD_TEXTURE2D_LOD(_DepthPyramidTexture, srcMipCoord + d.yy, mip).r;\
-        Store4(ldsMipCoord, mip, d00, d10, d01, d11);\
+        Store4(ldsMipCoord, mip - LDS_MIP_MIN, d00, d10, d01, d11);\
 \
-        if (groupThreadId == mip)\
-            DepthRects[mip] = int4(max(srcMipGroupCoord, int2(0, 0)), srcMipGroupCoord + LDS_MIP_LINELENGTH * 2);\
+        if (groupThreadId == (mip - LDS_MIP_MIN))\
+            DepthRects[mip - LDS_MIP_MIN] = int4(max(srcMipGroupCoord, int2(0, 0)), srcMipGroupCoord + LDS_MIP_LINELENGTH * 2);\
         GroupMemoryBarrierWithGroupSync();\
     }
 
-    LOAD_DEPTH_LDS(0)
     LOAD_DEPTH_LDS(1)
     LOAD_DEPTH_LDS(2)
-    // LOAD_DEPTH_LDS(3)
-    // LOAD_DEPTH_LDS(4)
+    LOAD_DEPTH_LDS(3)
+    LOAD_DEPTH_LDS(4)
 
 #undef LOAD_DEPTH_LDS
 
 #ifdef DEBUG_DISPLAY
-    uint mipToDebug = 0;
+    uint mipToDebug = 1;
     if (_SSRDebugMode == 0)
     {
         float depth;
-        LoadDeviceDepthFromLDS(positionTXS >> mipToDebug, mipToDebug, depth);
+        LoadDeviceDepthFromLDS((positionTXS >> mipToDebug), mipToDebug, depth);
         _DebugTexture[positionTXS] = float4(float3(1, 1, 1) * frac(LinearEyeDepth(depth, _ZBufferParams) * 0.1), 1);
     }
 #endif
