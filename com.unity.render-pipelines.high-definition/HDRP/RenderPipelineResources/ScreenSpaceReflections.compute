@@ -12,7 +12,7 @@
 #define GROUP_SIZE_2D (GROUP_SIZE_1D * GROUP_SIZE_1D)
 #define WAVEFRONT_SIZE 64
 #define USE_COMPRESSED_BAYER4
-//#define PASS_CASTRAYS_USE_LDS
+#define PASS_CASTRAYS_USE_LDS
 
 #elif PASS == PASS_ALLOCATE_RAYS
 // Kernel settings
@@ -211,7 +211,7 @@ Texture2D<uint4> _SSReflectionRayAllocationTexture;
 // we store 16x16 pixels and compress two float in one, so storage is (GROUP_SIZE_2D * 4) / 2
 #define LDS_MIP_STORAGE (GROUP_SIZE_2D * 2)
 groupshared uint Depth[LDS_MIP_STORAGE * LDS_MIP_COUNT];
-groupshared int4 DepthRects[LDS_MIP_COUNT];
+groupshared int2 DepthRects[LDS_MIP_COUNT];
 
 void Store4(uint2 ldsMipCoord, int lod, float p00, float p10, float p01, float p11)
 {
@@ -235,12 +235,18 @@ bool LoadDeviceDepthFromLDS(uint2 positionTXS, int lod, out float deviceDepth)
 {
     if (lod >= LDS_MIP_MIN && lod <= LDS_MIP_MAX)
     {
-        lod -= LDS_MIP_MIN;
-        int4 rects = DepthRects[lod];
-        rects = int4(int2(positionTXS) - rects.xy, rects.zw - int2(positionTXS));
-        if (all(rects >= 0))
+        int2 rects = DepthRects[lod - LDS_MIP_MIN];
+        int2 relPositionTXS = int2(positionTXS) - rects.xy;
+        
+        // Use bool to store each condition to save VGPRs
+        bool c1 = relPositionTXS.x >= 0;
+        bool c2 = relPositionTXS.y >= 0;
+        relPositionTXS = (2 * LDS_MIP_LINELENGTH) - relPositionTXS;
+        bool c3 = relPositionTXS.x >= 0;
+        bool c4 = relPositionTXS.y >= 0;
+        if (c1 && c2 && c3 && c4)
         {
-            deviceDepth = Load1(rects.xy, lod);
+            deviceDepth = Load1(relPositionTXS, lod - LDS_MIP_MIN);
             return true;
         }
     }
@@ -293,7 +299,7 @@ void KNAME(
         Store4(ldsMipCoord, mip - LDS_MIP_MIN, d00, d10, d01, d11);\
 \
         if (groupThreadId == (mip - LDS_MIP_MIN))\
-            DepthRects[mip - LDS_MIP_MIN] = int4(max(srcMipGroupCoord, int2(0, 0)), srcMipGroupCoord + LDS_MIP_LINELENGTH * 2);\
+            DepthRects[mip - LDS_MIP_MIN] = int2(max(srcMipGroupCoord, int2(0, 0)));\
         GroupMemoryBarrierWithGroupSync();\
     }
 
