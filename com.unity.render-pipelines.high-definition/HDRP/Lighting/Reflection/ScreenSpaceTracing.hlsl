@@ -116,11 +116,13 @@ void CalculateRaySS(
     const float kNearClipPlane = -0.01;
     const float kMaxRayTraceDistance = 1000;
 
-    float3 rayOriginVS = mul(GetWorldToViewMatrix(), float4(rayOriginWS, 1.0)).xyz;
-    float3 rayDirVS = mul((float3x3)GetWorldToViewMatrix(), rayDirWS);
+    // Use _ViewMatrixZRow instead of GetWorldToViewMatrix() to save SGPR (we only need the third row of the matrix)
+    float rayOriginVSZ = dot(_ViewMatrixZRow.xyz, rayOriginWS);
+    rayOriginVSZ += _ViewMatrixZRow.w;
+    float rayDirVSZ = dot(_ViewMatrixZRow.xyz, rayDirWS);
     // Clip ray to near plane to avoid raymarching behind camera
-    float rayLength = ((rayOriginVS.z + rayDirVS.z * kMaxRayTraceDistance) > kNearClipPlane)
-        ? ((kNearClipPlane - rayOriginVS.z) / rayDirVS.z)
+    float rayLength = ((rayOriginVSZ + rayDirVSZ * kMaxRayTraceDistance) > kNearClipPlane)
+        ? ((kNearClipPlane - rayOriginVSZ) / rayDirVSZ)
         : kMaxRayTraceDistance;
 
     float3 positionWS = rayOriginWS;

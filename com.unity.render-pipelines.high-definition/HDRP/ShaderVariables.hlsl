@@ -295,6 +295,7 @@ int     _SSReflectionEnabled;
 int     _SSReflectionProjectionModel;
 int     _SSReflectionHiZRayMarchBehindObject;
 int     _SSRefractionHiZRayMarchBehindObject;
+float4  _ViewMatrixZRow;
 
                                                 // Ambiant occlusion
 float4 _AmbientOcclusionParam; // xyz occlusion color, w directLightStrenght

@@ -500,6 +500,7 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
             cmd.SetGlobalVector(HDShaderIDs._ScreenParams,              screenParams);
             cmd.SetGlobalVector(HDShaderIDs._TaaFrameRotation,          taaFrameRotation);
             cmd.SetGlobalVectorArray(HDShaderIDs._FrustumPlanes,        frustumPlaneEquations);
+            cmd.SetGlobalVector(HDShaderIDs._ViewMatrixZRow, new Vector4(viewMatrix.m20, viewMatrix.m21, viewMatrix.m22, viewMatrix.m23));
 
             // Time is also a part of the UnityPerView CBuffer.
             // Different views can have different values of the "Animated Materials" setting.

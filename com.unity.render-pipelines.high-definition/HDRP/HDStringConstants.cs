@@ -204,6 +204,7 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
         public static readonly int _DecalDatas = Shader.PropertyToID("_DecalDatas");
 
         public static readonly int _WorldSpaceCameraPos = Shader.PropertyToID("_WorldSpaceCameraPos");
+        public static readonly int _ViewMatrixZRow = Shader.PropertyToID("_ViewMatrixZRow");
         public static readonly int _ViewMatrix = Shader.PropertyToID("_ViewMatrix");
         public static readonly int _InvViewMatrix = Shader.PropertyToID("_InvViewMatrix");
         public static readonly int _ProjMatrix = Shader.PropertyToID("_ProjMatrix");
