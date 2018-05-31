@@ -3,6 +3,7 @@
 #define GROUP_SIZE_1D 8
 #define GROUP_SIZE_2D (GROUP_SIZE_1D * GROUP_SIZE_1D)
 #define WAVEFRONT_SIZE 64
+#define USE_COMPRESSED_BAYER4
 
 #define LOAD_DEVICE_DEPTH(positionSS, level) LoadDeviceDepth(positionSS, level)
 float LoadDeviceDepth(uint2 positionSS, int level);

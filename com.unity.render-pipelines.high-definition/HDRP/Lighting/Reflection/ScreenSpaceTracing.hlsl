@@ -283,6 +283,7 @@ void DebugComputeCommonOutput(
 
 float SampleBayer4(uint2 positionSS)
 {
+// Save SGPR by compressing the bayer matrix into 64 bits instead of 512 bits
 #ifdef USE_COMPRESSED_BAYER4
     const uint2 Bayer4 = uint2(
         (0      ) | (8 << 4)  | (2 << 8) | (10 << 12) | (12 << 16) | (4 << 20) | (14 << 24) | (6 << 30),
