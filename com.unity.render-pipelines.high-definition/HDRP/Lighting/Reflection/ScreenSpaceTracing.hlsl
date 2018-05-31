@@ -283,12 +283,22 @@ void DebugComputeCommonOutput(
 
 float SampleBayer4(uint2 positionSS)
 {
+#ifdef USE_COMPRESSED_BAYER4
+    const uint2 Bayer4 = uint2(
+        (0      ) | (8 << 4)  | (2 << 8) | (10 << 12) | (12 << 16) | (4 << 20) | (14 << 24) | (6 << 30),
+        (3 << 0 ) | (11 << 4) | (1 << 8) | (9  << 12) | (15 << 16) | (7 << 20) | (13 << 24) | (5 << 30)
+    );
+
+    uint position = (positionSS.x & 0x7) | ((positionSS.y & 0x1) << 3);
+    return (Bayer4[position >> 3] << ((positionSS.x & 0x7) * 4) & 0xF) / 16.0;
+#else
     const float4x4 Bayer4 = float4x4(0,  8,  2,  10,
-                                         12, 4,  14, 6,
-                                         3,  11, 1,  9,
-                                         15, 7,  13, 5) / 16;
+                                     12, 4,  14, 6,
+                                     3,  11, 1,  9,
+                                     15, 7,  13, 5) / 16;
 
     return Bayer4[positionSS.x & 0x3][positionSS.y & 0x3];
+#endif
 }
 
 void PackRayHit(uint2 hitPositionSS, float2 hitPositionNDC, float hitWeight, bool hitSuccessful, out uint4 payload)
