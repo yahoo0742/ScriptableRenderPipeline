@@ -128,20 +128,24 @@ void CalculateRaySS(
     float3 positionWS = rayOriginWS;
     float3 rayEndWS = rayOriginWS + rayDirWS * rayLength;
 
-    float4 positionCS = ComputeClipSpacePosition(positionWS, GetWorldToHClipMatrix());
-    float4 rayEndCS = ComputeClipSpacePosition(rayEndWS, GetWorldToHClipMatrix());
+    float4x4 worldToHClip = GetWorldToHClipMatrix();
 
-    float2 positionNDC = ComputeNormalizedDeviceCoordinates(positionWS, GetWorldToHClipMatrix());
-    float2 rayEndNDC = ComputeNormalizedDeviceCoordinates(rayEndWS, GetWorldToHClipMatrix());
+    float4 positionCS = ComputeClipSpacePosition(positionWS, worldToHClip);
+    float4 rayEndCS = ComputeClipSpacePosition(rayEndWS, worldToHClip);
     rayEndDepth = rayEndCS.w;
+
+    float2 positionNDC = ComputeNormalizedDeviceCoordinates(positionWS, worldToHClip);
+    float2 rayEndNDC = ComputeNormalizedDeviceCoordinates(rayEndWS, worldToHClip);
 
     float3 rayStartSS = float3(
         positionNDC.xy * bufferSize,
-        1.0 / positionCS.w); // Screen space depth interpolate properly in 1/z
+        1.0 / positionCS.w // Screen space depth interpolate properly in 1/z
+    );
 
     float3 rayEndSS = float3(
         rayEndNDC.xy * bufferSize,
-        1.0 / rayEndDepth); // Screen space depth interpolate properly in 1/z
+        1.0 / rayEndDepth  // Screen space depth interpolate properly in 1/z
+    );
 
     positionSS = rayStartSS;
     raySS = rayEndSS - rayStartSS;
@@ -678,6 +682,17 @@ bool ScreenSpaceLinearProxyRaycast(
 //  - It is cheaper in case of close hit than starting with HiZ
 //  - It will start the HiZ algorithm with an offset, preventing false positive hit at ray origin.
 // -------------------------------------------------
+struct ScreenSpaceRaymarchInputPrecomputed
+{
+    float3 startPositionSS;
+    float3 raySS;
+    float rayEndDepth;
+
+#ifdef DEBUG_DISPLAY
+    bool debug;
+#endif
+};
+
 ScreenSpaceRaymarchInput CreateScreenSpaceHiZRaymarchInput(
     float3          rayOriginWS,
     float3          rayDirWS,
@@ -700,7 +715,7 @@ ScreenSpaceRaymarchInput CreateScreenSpaceHiZRaymarchInput(
 }
 
 bool ScreenSpaceHiZRaymarch(
-    ScreenSpaceRaymarchInput input,
+    ScreenSpaceRaymarchInputPrecomputed input,
     // Settings
     uint settingsRayMinLevel,                       // Minimum mip level to use for ray marching the depth buffer in HiZ
     uint settingsRayMaxLevel,                       // Maximum mip level to use for ray marching the depth buffer in HiZ
@@ -715,6 +730,10 @@ bool ScreenSpaceHiZRaymarch(
     out float hitWeight
 )
 {
+    float3 startPositionSS  = input.startPositionSS;
+    float3 raySS            = input.raySS;
+    float rayEndDepth       = input.rayEndDepth;
+
     const float2 CROSS_OFFSET = float2(1, 1);
 
     // Initialize loop
@@ -725,18 +744,6 @@ bool ScreenSpaceHiZRaymarch(
     int minMipLevel                     = max(settingsRayMinLevel, 0u);
     int maxMipLevel                     = min(settingsRayMaxLevel, uint(_DepthPyramidScale.z));
     uint maxIterations                  = settingsRayMaxIterations;
-
-    float3 startPositionSS;
-    float3 raySS;
-    float rayEndDepth;
-    CalculateRaySS(
-        input.rayOriginWS,
-        input.rayDirWS,
-        uint2(_DepthPyramidSize.xy),
-        startPositionSS,
-        raySS,
-        rayEndDepth
-    );
 
 #ifdef DEBUG_DISPLAY
     // Initialize debug variables
@@ -977,6 +984,59 @@ bool ScreenSpaceHiZRaymarch(
 
     return hitSuccessful;
 }
+
+bool ScreenSpaceHiZRaymarch(
+    ScreenSpaceRaymarchInput input,
+    // Settings
+    uint settingsRayMinLevel,                       // Minimum mip level to use for ray marching the depth buffer in HiZ
+    uint settingsRayMaxLevel,                       // Maximum mip level to use for ray marching the depth buffer in HiZ
+    uint settingsRayMaxIterations,                  // Maximum number of iteration for the HiZ raymarching (= number of depth sample for HiZ)
+    float settingsDepthBufferThickness,             // Bias to use when trying to detect whenever we raymarch behind a surface
+    float settingsRayMaxScreenDistance,             // Maximum screen distance raymarched
+    float settingsRayBlendScreenDistance,           // Distance to blend before maximum screen distance is reached
+    bool settingsRayMarchBehindObjects,             // Whether to raymarch behind objects
+    int settingsDebuggedAlgorithm,                  // currently debugged algorithm (see PROJECTIONMODEL defines)
+    // out
+    out ScreenSpaceRayHit hit,
+    out float hitWeight
+)
+{
+    float3 startPositionSS;
+    float3 raySS;
+    float rayEndDepth;
+    CalculateRaySS(
+        input.rayOriginWS,
+        input.rayDirWS,
+        uint2(_DepthPyramidSize.xy),
+        startPositionSS,
+        raySS,
+        rayEndDepth
+    );
+
+    ScreenSpaceRaymarchInputPrecomputed preInput;
+    preInput.startPositionSS    = startPositionSS;
+    preInput.raySS              = raySS;
+    preInput.rayEndDepth        = rayEndDepth;
+#ifdef DEBUG_DISPLAY
+    preInput.debug              = debug;
+#endif
+
+    return ScreenSpaceHiZRaymarch(
+        preInput,
+        // Settings
+        settingsRayMinLevel,
+        settingsRayMaxLevel,
+        settingsRayMaxIterations,
+        settingsDepthBufferThickness,
+        settingsRayMaxScreenDistance,
+        settingsRayBlendScreenDistance,
+        settingsRayMarchBehindObjects,
+        settingsDebuggedAlgorithm,
+        // out
+        hit,
+        hitWeight
+    );
+}
 #endif
 
 
@@ -1087,6 +1147,33 @@ bool MERGE_NAME(ScreenSpaceProxyRaycast, SSRTID)(
 // -------------------------------------------------
 bool MERGE_NAME(ScreenSpaceHiZRaymarch, SSRTID)(
     ScreenSpaceRaymarchInput input,
+    out ScreenSpaceRayHit hit,
+    out float hitWeight
+)
+{
+    return ScreenSpaceHiZRaymarch(
+        input,
+        // Settings
+        SSRT_SETTING(RayMinLevel, SSRTID),
+        SSRT_SETTING(RayMaxLevel, SSRTID),
+        SSRT_SETTING(RayMaxIterations, SSRTID),
+        max(0.01, SSRT_SETTING(DepthBufferThickness, SSRTID)),
+        SSRT_SETTING(RayMaxScreenDistance, SSRTID),
+        SSRT_SETTING(RayBlendScreenDistance, SSRTID),
+        SSRT_SETTING(RayMarchBehindObjects, SSRTID) == 1,
+#ifdef DEBUG_DISPLAY
+        SSRT_SETTING(DebuggedAlgorithm, SSRTID),
+#else
+        PROJECTIONMODEL_NONE,
+#endif
+        // out
+        hit,
+        hitWeight
+    );
+}
+
+bool MERGE_NAME(ScreenSpaceHiZRaymarch, SSRTID)(
+    ScreenSpaceRaymarchInputPrecomputed input,
     out ScreenSpaceRayHit hit,
     out float hitWeight
 )
