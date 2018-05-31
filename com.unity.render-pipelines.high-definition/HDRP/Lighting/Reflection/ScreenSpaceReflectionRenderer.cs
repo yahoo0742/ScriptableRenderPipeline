@@ -163,7 +163,7 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
                 var currentRTHRayHit = hdCamera.GetCurrentFrameRT((int)HDCameraFrameHistoryType.SSReflectionRayHit);
                 Assert.IsNotNull(currentRTHRayHit);
 
-                if (debug)
+                if (debug && false)
                 {
                     cmd.SetComputeTextureParam(
                         m_CS,

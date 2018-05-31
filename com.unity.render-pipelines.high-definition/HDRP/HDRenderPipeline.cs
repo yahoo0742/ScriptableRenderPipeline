@@ -1164,7 +1164,7 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
                         }
                     }
 #endif
-                    //PushFullScreenDebugTexture(hdCamera, cmd, m_CameraColorBuffer, FullScreenDebugMode.ScreenSpaceTracing);
+                    PushFullScreenDebugTexture(hdCamera, cmd, m_CameraColorBuffer, FullScreenDebugMode.ScreenSpaceTracing);
                     // Caution: RenderDebug need to take into account that we have flip the screen (so anything capture before the flip will be flipped)
                     RenderDebug(hdCamera, cmd);
 
