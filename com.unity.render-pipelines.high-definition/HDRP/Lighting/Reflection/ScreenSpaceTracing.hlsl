@@ -708,12 +708,12 @@ bool ScreenSpaceHiZRaymarch(
 
     // Initialize loop
     ZERO_INITIALIZE(ScreenSpaceRayHit, hit);
-    hitWeight = 0;
-    bool hitSuccessful = false;
-    uint iteration = 0u;
-    int minMipLevel = max(settingsRayMinLevel, 0u);
-    int maxMipLevel = min(settingsRayMaxLevel, uint(_DepthPyramidScale.z));
-    uint maxIterations = settingsRayMaxIterations;
+    hitWeight                           = 0;
+    bool hitSuccessful                  = false;
+    uint iteration                      = 0u;
+    int minMipLevel                     = max(settingsRayMinLevel, 0u);
+    int maxMipLevel                     = min(settingsRayMaxLevel, uint(_DepthPyramidScale.z));
+    uint maxIterations                  = settingsRayMaxIterations;
 
     float3 startPositionSS;
     float3 raySS;
@@ -740,21 +740,21 @@ bool ScreenSpaceHiZRaymarch(
     float debugIterationLinearDepthBufferMax = 0;
 #endif
 
-    iteration = 0u;
-    int intersectionKind = 0;
-    float raySSLength = length(raySS.xy);
-    raySS /= raySSLength;
+    iteration                           = 0u;
+    int intersectionKind                = 0;
+    float raySSLength                   = length(raySS.xy);
+    raySS                               /= raySSLength;
     // Initialize raymarching
 
     // Calculate planes to intersect for each cell
-    int2 cellPlanes = sign(raySS.xy);
-    float2 crossOffset = CROSS_OFFSET * cellPlanes;
-    cellPlanes = clamp(cellPlanes, 0, 1);
+    int2 cellPlanes                     = int2(FastSign(raySS.x), FastSign(raySS.y));
+    float2 crossOffset                  = CROSS_OFFSET * cellPlanes;
+    cellPlanes                          = saturate(cellPlanes);
 
-    int currentLevel = minMipLevel;
+    int currentLevel                    = minMipLevel;
 
-    float3 positionSS = startPositionSS;
-    float invLinearDepth = 0.0;
+    float3 positionSS                   = startPositionSS;
+    float invLinearDepth                = 0.0;
 
     float positionLinearDepth           = 0;
     float minLinearDepth                = 0;
@@ -855,14 +855,14 @@ bool ScreenSpaceHiZRaymarch(
             mipLevelDelta = 1;
         }
 
-        positionSS.xy   *= (1 << currentLevel);
-        raySS.xy        *= (1 << currentLevel);
+        positionSS.xy                       *= (1 << currentLevel);
+        raySS.xy                            *= (1 << currentLevel);
 
-        currentLevel = min(currentLevel + mipLevelDelta, maxMipLevel);
-        float4 distancesToBorders = float4(positionSS.xy, _DepthPyramidSize.xy - positionSS.xy);
-        float distanceToBorders = min(min(distancesToBorders.x, distancesToBorders.y), min(distancesToBorders.z, distancesToBorders.w));
-        int minLevelForBorders = int(log2(distanceToBorders));
-        currentLevel = min(currentLevel, minLevelForBorders);
+        currentLevel                        = min(currentLevel + mipLevelDelta, maxMipLevel);
+        float4 distancesToBorders           = float4(positionSS.xy, _DepthPyramidSize.xy - positionSS.xy);
+        float distanceToBorders             = min(min(distancesToBorders.x, distancesToBorders.y), min(distancesToBorders.z, distancesToBorders.w));
+        int minLevelForBorders              = int(log2(distanceToBorders));
+        currentLevel                        = min(currentLevel, minLevelForBorders);
 
 #ifdef DEBUG_DISPLAY
         // Fetch post iteration debug values
@@ -889,9 +889,9 @@ bool ScreenSpaceHiZRaymarch(
         ++iteration;
     }
 
-    hit.linearDepth = positionLinearDepth;
-    hit.positionSS = uint2(positionSS.xy);
-    hit.positionNDC = float2(hit.positionSS) / _DepthPyramidSize.xy;
+    hit.linearDepth         = positionLinearDepth;
+    hit.positionSS          = uint2(positionSS.xy);
+    hit.positionNDC         = float2(hit.positionSS) / _DepthPyramidSize.xy;
 
     // Detect when we go behind an object given a thickness
 
