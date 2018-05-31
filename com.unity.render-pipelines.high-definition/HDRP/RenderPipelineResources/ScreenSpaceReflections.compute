@@ -12,6 +12,7 @@
 #define GROUP_SIZE_2D (GROUP_SIZE_1D * GROUP_SIZE_1D)
 #define WAVEFRONT_SIZE 64
 #define USE_COMPRESSED_BAYER4
+//#define PASS_CASTRAYS_USE_LDS
 
 #elif PASS == PASS_ALLOCATE_RAYS
 // Kernel settings
@@ -25,15 +26,21 @@
 // -------------------------------------------------
 // Kernels
 // -------------------------------------------------
-#pragma kernel KCastRays_HiZ                KNAME=KCastRays_HiZ             PASS=PASS_CAST_RAYS     PROJECTIONMODEL=PROJECTIONMODEL_HI_Z
-#pragma kernel KCastRays_Proxy              KNAME=KCastRays_Proxy           PASS=PASS_CAST_RAYS     PROJECTIONMODEL=PROJECTIONMODEL_PROXY
-#pragma kernel KCastRays_Debug_HiZ          KNAME=KCastRays_Debug_HiZ       PASS=PASS_CAST_RAYS     PROJECTIONMODEL=PROJECTIONMODEL_HI_Z     DEBUG_DISPLAY
-#pragma kernel KCastRays_Debug_Proxy        KNAME=KCastRays_Debug_Proxy     PASS=PASS_CAST_RAYS     PROJECTIONMODEL=PROJECTIONMODEL_PROXY    DEBUG_DISPLAY
+#pragma kernel KCastRays_HiZ                KNAME=KCastRays_HiZ             PASS=PASS_CAST_RAYS         PROJECTIONMODEL=PROJECTIONMODEL_HI_Z
+#pragma kernel KCastRays_Proxy              KNAME=KCastRays_Proxy           PASS=PASS_CAST_RAYS         PROJECTIONMODEL=PROJECTIONMODEL_PROXY
+#pragma kernel KCastRays_Debug_HiZ          KNAME=KCastRays_Debug_HiZ       PASS=PASS_CAST_RAYS         PROJECTIONMODEL=PROJECTIONMODEL_HI_Z     DEBUG_DISPLAY
+#pragma kernel KCastRays_Debug_Proxy        KNAME=KCastRays_Debug_Proxy     PASS=PASS_CAST_RAYS         PROJECTIONMODEL=PROJECTIONMODEL_PROXY    DEBUG_DISPLAY
 #pragma kernel KAllocateRays_HiZ            KNAME=KAllocateRays_HiZ         PASS=PASS_ALLOCATE_RAYS
 
 // -------------------------------------------------
 // Common includes of passes
 // -------------------------------------------------
+#if PROJECTIONMODEL == PROJECTIONMODEL_HI_Z && defined(PASS_CASTRAYS_USE_LDS)
+// Setup the function to load depth from LDS (only HiZ)
+#define LOAD_DEVICE_DEPTH(positionSS, level) LoadDeviceDepth(positionSS, level)
+float LoadDeviceDepth(uint2 positionSS, int level);
+#endif
+
 #include "CoreRP/ShaderLibrary/Common.hlsl"
 #include "CoreRP/ShaderLibrary/SpaceFillingCurves.hlsl"
 #define LIGHTLOOP_TILE_PASS 1
@@ -43,6 +50,7 @@
 #include "CoreRP/ShaderLibrary/ImageBasedLighting.hlsl"
 #define UNITY_MATERIAL_LIT // Need to be define before including Material.hlsl
 #include "HDRP/ShaderVariables.hlsl"
+#include "HDRP/Debug/DebugDisplay.hlsl"
 #include "HDRP/Material/Material.hlsl"
 #include "HDRP/Material/Builtin/BuiltinData.hlsl"
 #include "HDRP/Material/Lit/Lit.cs.hlsl"
@@ -50,7 +58,6 @@
 #include "HDRP/Lighting/Reflection/VolumeProjection.hlsl"
 #ifdef DEBUG_DISPLAY
 #include "CoreRP/ShaderLibrary/Debug.hlsl"
-#include "HDRP/Debug/DebugDisplay.hlsl"
 #endif
 
 // -------------------------------------------------
@@ -73,7 +80,7 @@ void DecodeGBufferSSR(uint2 positionSS, out float3 normalWS, out float perceptua
     perceptualRoughness = bsdfData.perceptualRoughness;
 }
 
-void DecodeThreadGroup(uint groupThreadId, uint2 groupId, out uint2 groupCoord, out uint2 groupThreadCoord, uint2 positionTXS)
+void DecodeThreadGroup(uint groupThreadId, uint2 groupId, out uint2 groupCoord, out uint2 groupThreadCoord, out uint2 positionTXS)
 {
     groupThreadId &= GROUP_SIZE_2D - 1;
 
@@ -104,12 +111,6 @@ void DecodeRayAllocation(uint4 payload, out float3 startPositionSS, out float3 r
 // Cast rays in screen space and store the hit in a buffer
 // -------------------------------------------------
 #if PASS == PASS_CAST_RAYS
-
-#if PROJECTIONMODEL == PROJECTIONMODEL_HI_Z
-// Setup the function to load depth from LDS (only HiZ)
-#define LOAD_DEVICE_DEPTH(positionSS, level) LoadDeviceDepth(positionSS, level)
-float LoadDeviceDepth(uint2 positionSS, int level);
-#endif
 
 // Resources
 RW_TEXTURE2D(uint4, _SSReflectionRayHitNextTexture);
@@ -149,7 +150,7 @@ void KNAME(
     float depth;
     float3 V;
     float3 positionWS;
-    DecodeInput(positionTXS, positionTXS, depth, V);
+    DecodeInput(positionTXS, positionWS, depth, V);
     float3 normalWS;
     float perceptualRoughness;
     DecodeGBufferSSR(positionTXS, normalWS, perceptualRoughness);
@@ -200,6 +201,7 @@ void KNAME(
 
 Texture2D<uint4> _SSReflectionRayAllocationTexture;
 
+#ifdef PASS_CASTRAYS_USE_LDS
 // LDS Definition And Utility Functions
 // We load some mips of the Depth Pyramid in the LDS to save Texture Bandwidth
 #define LDS_MIP_MIN 1
@@ -257,6 +259,7 @@ float LoadDeviceDepth(uint2 positionTXS, int lod)
 
     return LOAD_TEXTURE2D_LOD(_DepthPyramidTexture, positionTXS, lod).x;
 }
+#endif
 
 
 [numthreads(GROUP_SIZE_2D, 1, 1)]
@@ -270,6 +273,7 @@ void KNAME(
     uint2 positionTXS;
     DecodeThreadGroup(groupThreadId, groupId, groupCoord, groupThreadCoord, positionTXS);
     
+#ifdef PASS_CASTRAYS_USE_LDS
     // -------------------------------
     // Load Depth Pyramid in LDS
     // -------------------------------
@@ -308,6 +312,7 @@ void KNAME(
         LoadDeviceDepthFromLDS((positionTXS >> mipToDebug), mipToDebug, depth);
         _DebugTexture[positionTXS] = float4(float3(1, 1, 1) * frac(LinearEyeDepth(depth, _ZBufferParams) * 0.1), 1);
     }
+#endif
 #endif
 
     // -------------------------------
@@ -352,6 +357,8 @@ void KNAME(
 // Calculate initialization values for HiZ algorithm
 // -------------------------------------------------
 #elif PASS == PASS_ALLOCATE_RAYS
+
+RW_TEXTURE2D(uint4, _SSReflectionRayAllocationTexture);
 
 // -------------------------------------------------
 // Entry point: Allocate Rays
@@ -410,5 +417,7 @@ void KNAME(
 
     uint4 payload = uint4(0, 0, 0, 0);
     EncodeRayAllocation(startPositionSS, raySS, rayEndDepth, debug, payload);
+
+    _SSReflectionRayAllocationTexture[positionTXS] = payload;
 }
 #endif

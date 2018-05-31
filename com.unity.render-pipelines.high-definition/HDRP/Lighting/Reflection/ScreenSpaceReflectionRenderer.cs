@@ -14,12 +14,15 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
             public static readonly int _SSReflectionRayHitNextTexture       = Shader.PropertyToID("_SSReflectionRayHitNextTexture");
             public static readonly int _SSReflectionRayHitNextSize          = Shader.PropertyToID("_SSReflectionRayHitNextSize");
             public static readonly int _SSReflectionRayHitNextScale         = Shader.PropertyToID("_SSReflectionRayHitNextScale");
+            public const int KAllocateRay_KernelSize = 8;
             public const int KCastRay_KernelSize = 8;
 
             Vector3Int[]         m_KCastRays_NumThreads;
             int[]                m_KCastRays;
             Vector3Int[]         m_KCastRaysDebug_NumThreads;
             int[]                m_KCastRaysDebug;
+            public Vector3Int           KAllocateRays_NumThreads;
+            public int                  KAllocateRays;
 
             public int GetKCastRays(
                 Lit.ProjectionModel projectionModel, 
@@ -47,6 +50,12 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
                 m_KCastRays = new int[(int)Lit.ProjectionModel.Count];
                 m_KCastRaysDebug_NumThreads = new Vector3Int[(int)Lit.ProjectionModel.Count];
                 m_KCastRaysDebug = new int[(int)Lit.ProjectionModel.Count];
+                FindKernel(
+                    cs,
+                    "KAllocateRays_HiZ",
+                    out KAllocateRays,
+                    ref KAllocateRays_NumThreads
+                );
 
                 for (int i = 0, c = k_SupportedProjectionModels.Length; i < c; ++i)
                 {
@@ -77,6 +86,7 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
         ComputeShader m_CS;
         CSMeta m_Kernels;
         RTHandleSystem m_RTHSystem;
+        RTHandleSystem.RTHandle m_RayAllocationTexture;
 
         public ScreenSpaceReflectionRenderer(
             RTHandleSystem rthSystem,
@@ -90,15 +100,22 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
 
         public void AllocateBuffers()
         {
+            m_RayAllocationTexture = m_RTHSystem.Alloc(
+                Vector2.one,
+                colorFormat: RenderTextureFormat.ARGBInt,
+                enableRandomWrite: true
+            );
         }
 
-        public void ClearBuffers()
+        public void ClearBuffers(CommandBuffer cmd, HDCamera hdCamera)
         {
+            HDUtils.SetRenderTarget(cmd, hdCamera, m_RayAllocationTexture, ClearFlag.Color, CoreUtils.clearColorAllBlack);
         }
 
         public void ReleaseBuffers()
         {
-            
+            m_RTHSystem.Release(m_RayAllocationTexture);
+            m_RayAllocationTexture = null;
         }
 
         public void PushGlobalParams(HDCamera hdCamera, CommandBuffer cmd, FrameSettings frameSettings)
@@ -110,6 +127,11 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
                 HDShaderIDs._SSReflectionRayHitTexture,
                 HDShaderIDs._SSReflectionRayHitSize,
                 HDShaderIDs._SSReflectionRayHitScale
+            );
+
+            cmd.SetGlobalTexture(
+                HDShaderIDs._SSReflectionRayAllocationTexture,
+                m_RayAllocationTexture
             );
         }
 
@@ -124,6 +146,10 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
                     ?? ScreenSpaceReflection.@default;
 
             var projectionModel     = (Lit.ProjectionModel)ssReflection.deferredProjectionModel.value;
+
+            if (projectionModel == Lit.ProjectionModel.HiZ)
+                RenderPassAllocateRays(hdCamera, cmd);
+
             var kernel              = m_Kernels.GetKCastRays(projectionModel, debug);
             var threadGroups        = new Vector3Int(
                                         // We use 8x8 kernel for KCastRays
@@ -165,6 +191,34 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
                     HDShaderIDs._SSReflectionRayHitTexture,
                     HDShaderIDs._SSReflectionRayHitSize,
                     HDShaderIDs._SSReflectionRayHitScale
+                );
+            }
+        }
+
+        void RenderPassAllocateRays(
+            HDCamera hdCamera, 
+            CommandBuffer cmd
+        )
+        {
+            var kernel              = m_Kernels.KAllocateRays;
+            var threadGroups        = new Vector3Int(
+                                        Mathf.CeilToInt((hdCamera.actualWidth) / (float)CSMeta.KAllocateRay_KernelSize),
+                                        Mathf.CeilToInt((hdCamera.actualHeight) / (float)CSMeta.KAllocateRay_KernelSize),
+                                        1
+                                    );
+
+            using (new ProfilingSample(cmd, "Screen Space Reflection - Allocate Rays", CustomSamplerId.SSRAllocateRays.GetSampler()))
+            {
+                cmd.SetComputeTextureParam(
+                    m_CS,
+                    kernel,
+                    HDShaderIDs._SSReflectionRayAllocationTexture,
+                    m_RayAllocationTexture
+                );
+                cmd.DispatchCompute(
+                    m_CS,
+                    kernel,
+                    threadGroups.x, threadGroups.y, threadGroups.z
                 );
             }
         }

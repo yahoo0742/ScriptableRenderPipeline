@@ -288,6 +288,7 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
         public static readonly int _SSReflectionInvScreenWeightDistance = Shader.PropertyToID("_SSReflectionInvScreenWeightDistance");
         public static readonly int _SSReflectionProjectionModel = Shader.PropertyToID("_SSReflectionProjectionModel");
         public static readonly int _SSReflectionEnabled = Shader.PropertyToID("_SSReflectionEnabled");
+        public static readonly int _SSReflectionRayAllocationTexture = Shader.PropertyToID("_SSReflectionRayAllocationTexture");
         public static readonly int _SSReflectionRayHitTexture = Shader.PropertyToID("_SSReflectionRayHitTexture");
         public static readonly int _SSReflectionRayHitSize = Shader.PropertyToID("_SSReflectionRayHitSize");
         public static readonly int _SSReflectionRayHitScale = Shader.PropertyToID("_SSReflectionRayHitScale");

@@ -924,7 +924,7 @@ bool ScreenSpaceHiZRaymarch(
         hitSuccessful = false;
 
 #ifdef DEBUG_DISPLAY
-    DebugComputeCommonOutput(input.rayDirWS, hitSuccessful, PROJECTIONMODEL_HI_Z, hit);
+    DebugComputeCommonOutput(float3(0, 0, 0), hitSuccessful, PROJECTIONMODEL_HI_Z, hit);
     switch (_DebugLightingSubMode)
     {
     case DEBUGSCREENSPACETRACING_HI_ZPOSITION_NDC:
@@ -1018,7 +1018,7 @@ bool ScreenSpaceHiZRaymarch(
     preInput.raySS              = raySS;
     preInput.rayEndDepth        = rayEndDepth;
 #ifdef DEBUG_DISPLAY
-    preInput.debug              = debug;
+    preInput.debug              = input.debug;
 #endif
 
     return ScreenSpaceHiZRaymarch(

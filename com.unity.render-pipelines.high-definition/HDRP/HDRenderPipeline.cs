@@ -1980,7 +1980,7 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
                 }
                 // END TEMP
 
-                m_ScreenSpaceReflectionRenderer.ClearBuffers();
+                m_ScreenSpaceReflectionRenderer.ClearBuffers(cmd, hdCamera);
             }
         }
 
