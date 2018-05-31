@@ -119,7 +119,7 @@ void KNAME(
     uint2 positionTXS       = groupCoord + groupThreadCoord;
 
     uint2 tileCoord         = uint2(0, 0);
-    uint  featureFlags      = UINT_MAX;
+    uint  featureFlags      = 0;
     EnvLightData envLightData;
     ZERO_INITIALIZE(EnvLightData, envLightData);
 
@@ -173,20 +173,18 @@ void KNAME(
 
     float3 V = GetWorldSpaceNormalizeViewDir(posInput.positionWS);
 
+    // Temporary
+    // TODO: create a DECODE_FROM_GBUFFER_SSR to decode only normal and roughness
     BSDFData bsdfData;
     BakeLightingData bakeLightingData;
     DECODE_FROM_GBUFFER(posInput.positionSS, featureFlags, bsdfData, bakeLightingData.bakeDiffuseLighting);
-#ifdef SHADOWS_SHADOWMASK
-    DecodeShadowMask(LOAD_TEXTURE2D(_ShadowMaskTexture, posInput.positionSS), bakeLightingData.bakeShadowMask);
-#endif
-
-    PreLightData preLightData = GetPreLightData(V, posInput, bsdfData);
+    // End temporary
 
     // -------------------------------
     // Initialize screen space tracing
     // -------------------------------
     float3 rayOriginWS              = posInput.positionWS;
-    float3 rayDirWS                 = preLightData.iblR;
+    float3 rayDirWS                 = reflect(-V, bsdfData.normalWS);
 
 #if DEBUG_DISPLAY
     int debugMode                   = DEBUGLIGHTINGMODE_SCREEN_SPACE_TRACING_REFLECTION;
