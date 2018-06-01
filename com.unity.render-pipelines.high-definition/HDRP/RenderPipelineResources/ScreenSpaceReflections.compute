@@ -98,7 +98,7 @@ uint GetIndex(uint2 groupId, uint groupThreadId)
     return groupThreadId + (groupId.y * groupPerRow + groupId.x) * GROUP_SIZE_2D + 3;
 }
 
-void DecodeGBufferSSR(uint2 positionSS, out float3 normalWS, out float perceptualRoughness)
+void DecodeSSRBuffer(uint2 positionSS, out float3 normalWS, out float perceptualRoughness)
 {
     BSDFData bsdfData;
     BakeLightingData bakeLightingData;
@@ -160,14 +160,14 @@ void KNAME(
     uint2 groupThreadCoord  = DecodeMorton2D(groupThreadId);
     uint2 positionSS        = groupCoord + groupThreadCoord;
 
-    // Decode GBuffer
+    // Decode Buffer
     float depth                 = LOAD_TEXTURE2D_LOD(_DepthPyramidTexture, positionSS, 0).x;
     PositionInputs posInput     = GetPositionInput(positionSS.xy, _ScreenSize.zw, depth, UNITY_MATRIX_I_VP, UNITY_MATRIX_V, int2(0, 0));
     float3 V                    = GetWorldSpaceNormalizeViewDir(posInput.positionWS);
     float3 positionWS           = posInput.positionWS;
     float3 normalWS;
     float perceptualRoughness;
-    DecodeGBufferSSR(positionSS, normalWS, perceptualRoughness);
+    DecodeSSRBuffer(positionSS, normalWS, perceptualRoughness);
 
     // Calculate ray endpoints
     float3 rayOriginWS              = positionWS;
@@ -239,7 +239,7 @@ void KNAME(
     float3 positionWS           = posInput.positionWS;
     float3 normalWS;
     float perceptualRoughness;
-    DecodeGBufferSSR(positionSS, normalWS, perceptualRoughness);
+    DecodeSSRBuffer(positionSS, normalWS, perceptualRoughness);
 
 
     // TODO: decode proxy data
