@@ -8,9 +8,10 @@
 // 2. Resolve color
 //
 // Raytracing passes
-// 1. Allocate rays
-// 2. Cast rays
-// 3. Resolve color
+// 1. Clear buffers
+// 2. Allocate rays
+// 3. Cast rays
+// 4. Resolve color
 // -------------------------------------------------
 
 #define PASS_CLEAR 0
@@ -123,8 +124,8 @@ void KNAME(
 {
     // Clear allocated dispatch indirect buffer
     _Payload[0] = 0;
-    _Payload[1] = 0;
-    _Payload[2] = 0;
+    _Payload[1] = 1;
+    _Payload[2] = 1;
 }
 
 // #################################################
@@ -149,15 +150,7 @@ void KNAME(
 )
 {
     if (groupThreadId == 0)
-    {
         InterlockedAdd(_Payload[0], 1);
-        if (groupId.x == 0 && groupId.y == 0)
-        {
-            _Payload[1] = 1;
-            _Payload[2] = 1;
-        }
-    }
-        
 
     groupThreadId &= GROUP_SIZE_2D - 1;
 
@@ -311,54 +304,6 @@ void KNAME(
     float3 startRayPositionSS       = _Payload1[index].xyz;
     float3 endRayPositionSS         = _Payload2[index].xyz;
     float3 raySS                    = endRayPositionSS - startRayPositionSS;
-
-    // Testing code
-    // {
-    //     float depth;
-    //     float3 V;
-    //     float3 positionWS;
-    //     DecodeInput(positionTXS, positionWS, depth, V);
-    //     float3 normalWS;
-    //     float perceptualRoughness;
-    //     DecodeGBufferSSR(positionTXS, normalWS, perceptualRoughness);
-
-    //     float3 rayOriginWS              = positionWS;
-    //     float3 rayDirWS                 = reflect(-V, normalWS);
-    //     bool debug                      = false;
-
-    //     ScreenSpaceRaymarchInput ssRayInput = CreateScreenSpaceHiZRaymarchInput(
-    //         rayOriginWS,
-    //         rayDirWS,
-    //         positionTXS
-    // #ifdef DEBUG_DISPLAY
-    //         , debug
-    // #endif
-    //     );
-        
-    //     float3 startPositionSS2;
-    //     float3 raySS2;
-    //     float rayEndDepth2;
-    //     CalculateRaySS(
-    //         ssRayInput.rayOriginWS,
-    //         ssRayInput.rayDirWS,
-    //         uint2(_DepthPyramidSize.xy),
-    //         startPositionSS2,
-    //         raySS2,
-    //         rayEndDepth2
-    //     );
-
-    //     // EncodeRayAllocation(startPositionSS2, raySS2, inputPayload);
-    //     // DecodeRayAllocation(inputPayload, startPositionSS2, raySS2);
-
-    //     startPositionSS = startPositionSS2;
-    //     raySS = raySS2;
-
-    //     // float jitter = SampleBayer4(positionTXS + uint2(_FrameCount, uint(_FrameCount) / 4u)) * 0.1;
-    //     // float tmp = jitter * startPositionSS.z * startPositionSS.z;
-    //     // float t = tmp / (raySS.z * (raySS.z + tmp));
-    //     // startPositionSS = startPositionSS + raySS * t;
-    // }
-    // End
 
     // Screen space tracing query
     ScreenSpaceRayHit hit;
