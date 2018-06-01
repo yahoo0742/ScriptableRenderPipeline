@@ -22,6 +22,7 @@ Shader "Hidden/HDRenderPipeline/DebugFullScreen"
             #include "CoreRP/ShaderLibrary/Debug.hlsl"
             #include "HDRP/Material/Lit/Lit.cs.hlsl"
             #include "../ShaderVariables.hlsl"
+            #include "../Debug/DebugDisplay.hlsl"
             #include "../Debug/DebugDisplay.cs.hlsl"
 
             CBUFFER_START (UnityDebug)
@@ -33,7 +34,6 @@ Shader "Hidden/HDRenderPipeline/DebugFullScreen"
             CBUFFER_END
 
             TEXTURE2D(_DebugFullScreenTexture);
-            StructuredBuffer<ScreenSpaceTracingDebug> _DebugScreenSpaceTracingData;
 
             struct Attributes
             {
@@ -233,7 +233,11 @@ Shader "Hidden/HDRenderPipeline/DebugFullScreen"
                 {
                     const float circleRadius = 3.5;
                     const float ringSize = 1.5;
-                    float4 color = SAMPLE_TEXTURE2D(_DebugFullScreenTexture, s_point_clamp_sampler, input.texcoord);
+                    float4 color = float4(0, 0, 0, 0);
+                    if (_DebugLightingSubMode == DEBUGSCREENSPACETRACING_COLOR)
+                        color = LOAD_TEXTURE2D_LOD(_ColorPyramidTexture, input.texcoord * _ScreenSize.xy, 0);
+                    else
+                        color = LOAD_TEXTURE2D_LOD(_DebugFullScreenTexture, input.texcoord * _ScreenSize.xy, 0);
 
                     ScreenSpaceTracingDebug debug = _DebugScreenSpaceTracingData[0];
 

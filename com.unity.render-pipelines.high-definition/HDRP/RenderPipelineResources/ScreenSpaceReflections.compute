@@ -1,35 +1,46 @@
 #pragma only_renderers d3d11 ps4 xboxone vulkan metal switch
 
-#define PASS_CAST_RAYS 0
-#define PASS_ALLOCATE_RAYS 1
+// -------------------------------------------------
+// Screen Space Reflection
+// -------------------------------------------------
+// Proxy passes
+// 1. Cast Rays
+// 2. Resolve color
+//
+// Raytracing passes
+// 1. Allocate rays
+// 2. Cast rays
+// 3. Resolve color
+// -------------------------------------------------
+
+#define PASS_CLEAR 0
+#define PASS_CAST_RAYS 1
+#define PASS_ALLOCATE_RAYS 2
+#define PASS_RESOLVE 3
 
 // -------------------------------------------------
 // Kernels Settings
 // -------------------------------------------------
-#if PASS == PASS_CAST_RAYS
 // Kernel settings
 #define GROUP_SIZE_1D 8
 #define GROUP_SIZE_2D (GROUP_SIZE_1D * GROUP_SIZE_1D)
 #define WAVEFRONT_SIZE 64
-//#define PASS_CASTRAYS_USE_LDS
 
+#if PASS == PASS_CLEAR
+#elif PASS == PASS_CAST_RAYS
 #elif PASS == PASS_ALLOCATE_RAYS
-// Kernel settings
-#define GROUP_SIZE_1D 8
-#define GROUP_SIZE_2D (GROUP_SIZE_1D * GROUP_SIZE_1D)
-#define WAVEFRONT_SIZE 64
-#define USE_COMPRESSED_BAYER4
-
+    #define USE_COMPRESSED_BAYER4
 #endif
 
 // -------------------------------------------------
 // Kernels
 // -------------------------------------------------
+#pragma kernel KClear                       KNAME=KClear                    PASS=PASS_CLEAR
+#pragma kernel KAllocateRays_HiZ            KNAME=KAllocateRays_HiZ         PASS=PASS_ALLOCATE_RAYS
 #pragma kernel KCastRays_HiZ                KNAME=KCastRays_HiZ             PASS=PASS_CAST_RAYS         PROJECTIONMODEL=PROJECTIONMODEL_HI_Z
 #pragma kernel KCastRays_Proxy              KNAME=KCastRays_Proxy           PASS=PASS_CAST_RAYS         PROJECTIONMODEL=PROJECTIONMODEL_PROXY
 #pragma kernel KCastRays_Debug_HiZ          KNAME=KCastRays_Debug_HiZ       PASS=PASS_CAST_RAYS         PROJECTIONMODEL=PROJECTIONMODEL_HI_Z     DEBUG_DISPLAY
 #pragma kernel KCastRays_Debug_Proxy        KNAME=KCastRays_Debug_Proxy     PASS=PASS_CAST_RAYS         PROJECTIONMODEL=PROJECTIONMODEL_PROXY    DEBUG_DISPLAY
-#pragma kernel KAllocateRays_HiZ            KNAME=KAllocateRays_HiZ         PASS=PASS_ALLOCATE_RAYS
 
 // -------------------------------------------------
 // Common includes of passes
@@ -60,14 +71,30 @@ float LoadDeviceDepth(uint2 positionSS, int level);
 #endif
 
 // -------------------------------------------------
-// Common functions
+// Common
 // -------------------------------------------------
-void DecodeInput(uint2 positionSS, out float3 positionWS, out float depth, out float3 V)
+struct AllocationPayload
 {
-    depth                       = LOAD_TEXTURE2D_LOD(_DepthPyramidTexture, positionSS, 0).x;
-    PositionInputs posInput     = GetPositionInput(positionSS.xy, _ScreenSize.zw, depth, UNITY_MATRIX_I_VP, UNITY_MATRIX_V, int2(0, 0));
-    V                           = GetWorldSpaceNormalizeViewDir(posInput.positionWS);
-    positionWS                  = posInput.positionWS;
+    uint2 positionSS;
+};
+
+uint EncodeAllocationPayload(AllocationPayload payload)
+{
+    return (payload.positionSS.x & 0xFFFF) | (payload.positionSS.y << 16);
+}
+
+AllocationPayload DecodeAllocationPayload(uint payload)
+{
+    AllocationPayload result;
+    result.positionSS.x = (payload & 0xFFFF);
+    result.positionSS.y = payload >> 16;
+    return result;
+}
+
+uint GetIndex(uint2 groupId, uint groupThreadId)
+{
+    uint groupPerRow = uint(ceil(_ScreenSize.x / GROUP_SIZE_1D));
+    return groupThreadId + (groupId.y * groupPerRow + groupId.x) * GROUP_SIZE_2D + 3;
 }
 
 void DecodeGBufferSSR(uint2 positionSS, out float3 normalWS, out float perceptualRoughness)
@@ -79,29 +106,97 @@ void DecodeGBufferSSR(uint2 positionSS, out float3 normalWS, out float perceptua
     perceptualRoughness = bsdfData.perceptualRoughness;
 }
 
-void DecodeThreadGroup(uint groupThreadId, uint2 groupId, out uint2 groupCoord, out uint2 groupThreadCoord, out uint2 positionTXS)
+// #################################################
+// Pass: Clear
+// #################################################
+// Clear buffers
+// -------------------------------------------------
+#if PASS == PASS_CLEAR
+
+RWStructuredBuffer<uint>    _Payload;
+
+[numthreads(1, 1, 1)]
+void KNAME(
+    uint2 groupId           : SV_GroupID,
+    uint  groupThreadId     : SV_GroupThreadID
+)
 {
+    // Clear allocated dispatch indirect buffer
+    _Payload[0] = 0;
+    _Payload[1] = 0;
+    _Payload[2] = 0;
+}
+
+// #################################################
+// Pass: Allocate Rays
+// #################################################
+// HiZ only
+// Calculate initialization values for HiZ algorithm
+// -------------------------------------------------
+#elif PASS == PASS_ALLOCATE_RAYS
+
+RWStructuredBuffer<uint>    _Payload;
+RWBuffer<float4>            _Payload1;
+RWBuffer<float4>            _Payload2;
+
+// -------------------------------------------------
+// Entry point: Allocate Rays
+// -------------------------------------------------
+[numthreads(GROUP_SIZE_2D, 1, 1)]
+void KNAME(
+    uint2 groupId           : SV_GroupID,
+    uint  groupThreadId     : SV_GroupThreadID
+)
+{
+    if (groupThreadId == 0)
+    {
+        InterlockedAdd(_Payload[0], 1);
+        if (groupId.x == 0 && groupId.y == 0)
+        {
+            _Payload[1] = 1;
+            _Payload[2] = 1;
+        }
+    }
+        
+
     groupThreadId &= GROUP_SIZE_2D - 1;
 
-    groupCoord              = groupId * GROUP_SIZE_1D;
-    groupThreadCoord        = DecodeMorton2D(groupThreadId);
-    positionTXS             = groupCoord + groupThreadCoord;
-}
+    uint groupPerRow        = uint(ceil(_ScreenSize.x / GROUP_SIZE_1D));
+    uint index              = groupThreadId + (groupId.y * groupPerRow + groupId.x) * GROUP_SIZE_2D + 3;
+    uint2 groupCoord        = groupId * GROUP_SIZE_1D;
+    uint2 groupThreadCoord  = DecodeMorton2D(groupThreadId);
+    uint2 positionSS        = groupCoord + groupThreadCoord;
 
-void EncodeRayAllocation(float3 startPositionSS, float3 raySS, float rayEndDepth, bool debug, out uint4 payload)
-{
-    payload.x = f32tof16(startPositionSS.x) | (f32tof16(startPositionSS.y) << 16);
-    payload.y = f32tof16(startPositionSS.z) | (f32tof16(raySS.x) << 16);
-    payload.z = f32tof16(raySS.y) | (f32tof16(raySS.z) << 16);
-    payload.w = f32tof16(rayEndDepth) | ((debug ? 1 : 0) << 16);
-}
+    // Decode GBuffer
+    float depth                 = LOAD_TEXTURE2D_LOD(_DepthPyramidTexture, positionSS, 0).x;
+    PositionInputs posInput     = GetPositionInput(positionSS.xy, _ScreenSize.zw, depth, UNITY_MATRIX_I_VP, UNITY_MATRIX_V, int2(0, 0));
+    float3 V                    = GetWorldSpaceNormalizeViewDir(posInput.positionWS);
+    float3 positionWS           = posInput.positionWS;
+    float3 normalWS;
+    float perceptualRoughness;
+    DecodeGBufferSSR(positionSS, normalWS, perceptualRoughness);
 
-void DecodeRayAllocation(uint4 payload, out float3 startPositionSS, out float3 raySS, out float rayEndDepth, out bool debug)
-{
-    startPositionSS     = float3(f16tof32(payload.x), f16tof32(payload.x >> 16), f16tof32(payload.y));
-    raySS               = float3(f16tof32(payload.y >> 16), f16tof32(payload.z), f16tof32(payload.z >> 16));
-    rayEndDepth         = f16tof32(payload.z);
-    debug               = (payload.w & (1 << 17)) != 0;
+    // Calculate ray endpoints
+    float3 rayOriginWS              = positionWS;
+    float3 rayDirWS                 = reflect(-V, normalWS);
+
+    float3 startPositionSS;
+    float3 endPositionSS;
+    CalculateRayEndPointSS(
+        rayOriginWS + rayDirWS * SampleBayer4(positionSS + uint2(_FrameCount, uint(_FrameCount) / 4u)) * 0.1,
+        rayDirWS,
+        uint2(_DepthPyramidSize.xy),
+        startPositionSS,
+        endPositionSS
+    );
+
+    // Save payload
+    AllocationPayload allocationPayload;
+    allocationPayload.positionSS = positionSS;
+
+    _Payload[index]     = EncodeAllocationPayload(allocationPayload);
+    _Payload1[index]    = float4(startPositionSS, 1);
+    _Payload2[index]    = endPositionSS.xyzz;
 }
 
 // #################################################
@@ -109,7 +204,7 @@ void DecodeRayAllocation(uint4 payload, out float3 startPositionSS, out float3 r
 // #################################################
 // Cast rays in screen space and store the hit in a buffer
 // -------------------------------------------------
-#if PASS == PASS_CAST_RAYS
+#elif PASS == PASS_CAST_RAYS
 
 // Resources
 RW_TEXTURE2D(uint4, _SSReflectionRayHitNextTexture);
@@ -135,24 +230,24 @@ CBUFFER_END
 [numthreads(GROUP_SIZE_2D, 1, 1)]
 void KNAME(
     uint2 groupId       : SV_GroupID,
-    uint  groupThreadId : SV_GroupThreadID
+    uint  groupThreadId : SV_DispatchThreadID
 )
 {
-    // -------------------------------
-    // Decode pixel data
-    // -------------------------------
-    uint2 groupCoord;
-    uint2 groupThreadCoord;
-    uint2 positionTXS;
-    DecodeThreadGroup(groupThreadId, groupId, groupCoord, groupThreadCoord, positionTXS);
+    groupThreadId &= GROUP_SIZE_2D - 1;
 
-    float depth;
-    float3 V;
-    float3 positionWS;
-    DecodeInput(positionTXS, positionWS, depth, V);
+    uint2 groupCoord        = groupId * GROUP_SIZE_1D;
+    uint2 groupThreadCoord  = DecodeMorton2D(groupThreadId);
+    uint2 positionSS        = groupCoord + groupThreadCoord;
+
+    // Decode GBuffer
+    float depth                 = LOAD_TEXTURE2D_LOD(_DepthPyramidTexture, positionSS, 0).x;
+    PositionInputs posInput     = GetPositionInput(positionSS.xy, _ScreenSize.zw, depth, UNITY_MATRIX_I_VP, UNITY_MATRIX_V, int2(0, 0));
+    float3 V                    = GetWorldSpaceNormalizeViewDir(posInput.positionWS);
+    float3 positionWS           = posInput.positionWS;
     float3 normalWS;
     float perceptualRoughness;
-    DecodeGBufferSSR(positionTXS, normalWS, perceptualRoughness);
+    DecodeGBufferSSR(positionSS, normalWS, perceptualRoughness);
+
 
     // TODO: decode proxy data
     EnvLightData envLightData;
@@ -167,7 +262,7 @@ void KNAME(
 #if DEBUG_DISPLAY
     int debugMode                   = DEBUGLIGHTINGMODE_SCREEN_SPACE_TRACING_REFLECTION;
     bool debug                      = _DebugLightingMode == debugMode
-                                    && !any(int2(_MouseClickPixelCoord.xy) - int2(positionTXS));
+                                    && !any(int2(_MouseClickPixelCoord.xy) - int2(positionSS));
 #endif
 
     // -------------------------------
@@ -178,7 +273,7 @@ void KNAME(
     bool hitSuccessful = false;
 
     ScreenSpaceProxyRaycastInput ssRayInput = CreateScreenSpaceProxyRaycastInput(
-        rayOriginWS,
+        rayOriginWS + rayDirWS * SampleBayer4(positionSS + uint2(_FrameCount, uint(_FrameCount) / 4u)) * 0.1,
         rayDirWS,
         envLightData
 #ifdef DEBUG_DISPLAY
@@ -190,7 +285,7 @@ void KNAME(
     uint4 payload = uint4(0, 0, 0, 0);
     PackRayHit(hit.positionSS, hit.positionNDC, 1, hitSuccessful, payload);
 
-    _SSReflectionRayHitNextTexture[positionTXS] = payload;
+    _SSReflectionRayHitNextTexture[positionSS] = payload;
 }
 
 // -------------------------------------------------
@@ -198,231 +293,97 @@ void KNAME(
 // -------------------------------------------------
 #elif PROJECTIONMODEL == PROJECTIONMODEL_HI_Z
 
-Texture2D<uint4> _SSReflectionRayAllocationTexture;
-
-#ifdef PASS_CASTRAYS_USE_LDS
-// LDS Definition And Utility Functions
-// We load some mips of the Depth Pyramid in the LDS to save Texture Bandwidth
-#define LDS_MIP_MIN 1
-#define LDS_MIP_MAX 2
-#define LDS_MIP_COUNT (LDS_MIP_MAX - LDS_MIP_MIN + 1)
-#define LDS_MIP_LINELENGTH GROUP_SIZE_1D
-// we store 16x16 pixels and compress two float in one, so storage is (GROUP_SIZE_2D * 4) / 2
-#define LDS_MIP_STORAGE (GROUP_SIZE_2D * 2)
-groupshared uint Depth[LDS_MIP_STORAGE * LDS_MIP_COUNT];
-groupshared int2 DepthRects[LDS_MIP_COUNT];
-
-void Store4(uint2 ldsMipCoord, int lod, float p00, float p10, float p01, float p11)
-{
-    uint i0x = (ldsMipCoord.y * LDS_MIP_LINELENGTH + (ldsMipCoord.x >> 1)) + lod * LDS_MIP_STORAGE;
-    uint i1x = i0x + LDS_MIP_LINELENGTH;
-    Depth[i0x] = f32tof16(p00) | (f32tof16(p10) << 16);
-    Depth[i1x] = f32tof16(p01) | (f32tof16(p11) << 16);
-}
-
-float Load1(int2 ldsMipCoord, int lod)
-{
-    uint index = (ldsMipCoord.y * LDS_MIP_LINELENGTH + (ldsMipCoord.x >> 1)) + lod * LDS_MIP_STORAGE;
-    uint payload = Depth[index];
-    float p1 = f16tof32(payload);
-    float p2 = f16tof32(payload >> 16);
-    float mask = (ldsMipCoord.x & 1);
-    return mask == 1 ? p2 : p1;
-}
-
-bool LoadDeviceDepthFromLDS(uint2 positionTXS, int lod, out float deviceDepth)
-{
-    if (lod >= LDS_MIP_MIN && lod <= LDS_MIP_MAX)
-    {
-        int2 rects = DepthRects[lod - LDS_MIP_MIN];
-        int2 relPositionTXS = int2(positionTXS) - rects.xy;
-        
-        // Use bool to store each condition to save VGPRs
-        bool c1 = relPositionTXS.x >= 0;
-        bool c2 = relPositionTXS.y >= 0;
-        relPositionTXS = (2 * LDS_MIP_LINELENGTH) - relPositionTXS;
-        bool c3 = relPositionTXS.x >= 0;
-        bool c4 = relPositionTXS.y >= 0;
-        if (c1 && c2 && c3 && c4)
-        {
-            deviceDepth = Load1(relPositionTXS, lod - LDS_MIP_MIN);
-            return true;
-        }
-    }
-    deviceDepth = 0;
-    return false;
-}
-
-float LoadDeviceDepth(uint2 positionTXS, int lod)
-{
-    positionTXS = positionTXS >> lod;
-    float depth = 0;
-
-    UNITY_BRANCH
-    if (LoadDeviceDepthFromLDS(positionTXS, lod, depth))
-        return depth;
-
-    return LOAD_TEXTURE2D_LOD(_DepthPyramidTexture, positionTXS, lod).x;
-}
-#endif
-
+StructuredBuffer<uint>      _Payload;
+Buffer<float4>    _Payload1;
+Buffer<float4>    _Payload2;
+Texture2D<uint4>            _SSReflectionRayAllocationTexture;
 
 [numthreads(GROUP_SIZE_2D, 1, 1)]
 void KNAME(
-    uint2 groupId       : SV_GroupID,
-    uint  groupThreadId : SV_GroupThreadID
+    uint dispatchThreadID : SV_DispatchThreadID
 )
 {
-    uint2 groupCoord;
-    uint2 groupThreadCoord;
-    uint2 positionTXS;
-    DecodeThreadGroup(groupThreadId, groupId, groupCoord, groupThreadCoord, positionTXS);
+    uint index                      = dispatchThreadID;
     
-#ifdef PASS_CASTRAYS_USE_LDS
-    // -------------------------------
-    // Load Depth Pyramid in LDS
-    // -------------------------------
-    const uint2 d = uint2(0, 1);
+    // Read allocation payload
+    AllocationPayload allocation    = DecodeAllocationPayload(_Payload[index]);
+    uint2 positionSS                = allocation.positionSS;
+    float3 startRayPositionSS       = _Payload1[index].xyz;
+    float3 endRayPositionSS         = _Payload2[index].xyz;
+    float3 raySS                    = endRayPositionSS - startRayPositionSS;
 
-    // Load 16x16 pixels centered on the 8x8 wavefront
-    // Each thread load 4 pixels into LDS
-#define LOAD_DEPTH_LDS(mip)\
-    {\
-        int2 srcMipGroupCoord   = int2(groupCoord >> mip) - 4;\
-        uint2 ldsMipCoord       = (groupThreadCoord << 1);\
-        uint2 srcMipCoord       = srcMipGroupCoord + ldsMipCoord;\
-        float d00               = LOAD_TEXTURE2D_LOD(_DepthPyramidTexture, srcMipCoord + d.xx, mip).r;\
-        float d10               = LOAD_TEXTURE2D_LOD(_DepthPyramidTexture, srcMipCoord + d.yx, mip).r;\
-        float d01               = LOAD_TEXTURE2D_LOD(_DepthPyramidTexture, srcMipCoord + d.xy, mip).r;\
-        float d11               = LOAD_TEXTURE2D_LOD(_DepthPyramidTexture, srcMipCoord + d.yy, mip).r;\
-        Store4(ldsMipCoord, mip - LDS_MIP_MIN, d00, d10, d01, d11);\
-\
-        if (groupThreadId == (mip - LDS_MIP_MIN))\
-            DepthRects[mip - LDS_MIP_MIN] = int2(max(srcMipGroupCoord, int2(0, 0)));\
-        GroupMemoryBarrierWithGroupSync();\
-    }
+    // Testing code
+    // {
+    //     float depth;
+    //     float3 V;
+    //     float3 positionWS;
+    //     DecodeInput(positionTXS, positionWS, depth, V);
+    //     float3 normalWS;
+    //     float perceptualRoughness;
+    //     DecodeGBufferSSR(positionTXS, normalWS, perceptualRoughness);
 
-    LOAD_DEPTH_LDS(1)
-    LOAD_DEPTH_LDS(2)
-    // LOAD_DEPTH_LDS(3)
-    // LOAD_DEPTH_LDS(4)
+    //     float3 rayOriginWS              = positionWS;
+    //     float3 rayDirWS                 = reflect(-V, normalWS);
+    //     bool debug                      = false;
 
-#undef LOAD_DEPTH_LDS
+    //     ScreenSpaceRaymarchInput ssRayInput = CreateScreenSpaceHiZRaymarchInput(
+    //         rayOriginWS,
+    //         rayDirWS,
+    //         positionTXS
+    // #ifdef DEBUG_DISPLAY
+    //         , debug
+    // #endif
+    //     );
+        
+    //     float3 startPositionSS2;
+    //     float3 raySS2;
+    //     float rayEndDepth2;
+    //     CalculateRaySS(
+    //         ssRayInput.rayOriginWS,
+    //         ssRayInput.rayDirWS,
+    //         uint2(_DepthPyramidSize.xy),
+    //         startPositionSS2,
+    //         raySS2,
+    //         rayEndDepth2
+    //     );
 
-#ifdef DEBUG_DISPLAY
-    uint mipToDebug = 1;
-    if (_SSRDebugMode == 0)
-    {
-        float depth;
-        LoadDeviceDepthFromLDS((positionTXS >> mipToDebug), mipToDebug, depth);
-        _DebugTexture[positionTXS] = float4(float3(1, 1, 1) * frac(LinearEyeDepth(depth, _ZBufferParams) * 0.1), 1);
-    }
-#endif
-#endif
+    //     // EncodeRayAllocation(startPositionSS2, raySS2, inputPayload);
+    //     // DecodeRayAllocation(inputPayload, startPositionSS2, raySS2);
 
-    // -------------------------------
-    // Decode pixel data
-    // -------------------------------
-    uint4 inputPayload = _SSReflectionRayAllocationTexture[positionTXS];
-    float3 startPositionSS;
-    float3 raySS;
-    float rayEndDepth;
-    bool debug;
-    DecodeRayAllocation(inputPayload, startPositionSS, raySS, rayEndDepth, debug);
+    //     startPositionSS = startPositionSS2;
+    //     raySS = raySS2;
 
-    // -------------------------------
+    //     // float jitter = SampleBayer4(positionTXS + uint2(_FrameCount, uint(_FrameCount) / 4u)) * 0.1;
+    //     // float tmp = jitter * startPositionSS.z * startPositionSS.z;
+    //     // float t = tmp / (raySS.z * (raySS.z + tmp));
+    //     // startPositionSS = startPositionSS + raySS * t;
+    // }
+    // End
+
     // Screen space tracing query
-    // -------------------------------
     ScreenSpaceRayHit hit;
     ZERO_INITIALIZE(ScreenSpaceRayHit, hit);
     bool hitSuccessful = false;
     float hitWeight = 1;
 
     ScreenSpaceRaymarchInputPrecomputed ssRayInput;
-    ssRayInput.startPositionSS      = startPositionSS;
+    ssRayInput.startPositionSS      = startRayPositionSS;
     ssRayInput.raySS                = raySS;
-    ssRayInput.rayEndDepth          = rayEndDepth;
 #ifdef DEBUG_DISPLAY
-    ssRayInput.debug                = debug;
+    ssRayInput.debug                = _DebugLightingMode == DEBUGLIGHTINGMODE_SCREEN_SPACE_TRACING_REFLECTION
+                                    && !any(int2(_MouseClickPixelCoord.xy) - int2(allocation.positionSS));
 #endif
 
-    hitSuccessful = ScreenSpaceHiZRaymarchReflection(ssRayInput, hit, hitWeight);
+    hitSuccessful = ScreenSpaceHiZRaymarchPrecomputedReflection(ssRayInput, hit, hitWeight);
 
     uint4 outputPayload = uint4(0, 0, 0, 0);
     PackRayHit(hit.positionSS, hit.positionNDC, hitWeight, hitSuccessful, outputPayload);
 
-    _SSReflectionRayHitNextTexture[positionTXS] = outputPayload;
-}
-#endif
-
-// #################################################
-// Pass: Allocate Rays
-// #################################################
-// HiZ only
-// Calculate initialization values for HiZ algorithm
-// -------------------------------------------------
-#elif PASS == PASS_ALLOCATE_RAYS
-
-RW_TEXTURE2D(uint4, _SSReflectionRayAllocationTexture);
-
-// -------------------------------------------------
-// Entry point: Allocate Rays
-// -------------------------------------------------
-[numthreads(GROUP_SIZE_2D, 1, 1)]
-void KNAME(
-    uint2 groupId       : SV_GroupID,
-    uint  groupThreadId : SV_GroupThreadID
-)
-{
-    // -------------------------------
-    // Decode pixel data
-    // -------------------------------
-    uint2 groupCoord;
-    uint2 groupThreadCoord;
-    uint2 positionTXS;
-    DecodeThreadGroup(groupThreadId, groupId, groupCoord, groupThreadCoord, positionTXS);
-
-    float depth;
-    float3 V;
-    float3 positionWS;
-    DecodeInput(positionTXS, positionWS, depth, V);
-    float3 normalWS;
-    float perceptualRoughness;
-    DecodeGBufferSSR(positionTXS, normalWS, perceptualRoughness);
-
-    float3 rayOriginWS              = positionWS;
-    float3 rayDirWS                 = reflect(-V, normalWS);
-    bool debug                      = false;
-
-#if DEBUG_DISPLAY
-    debug                           = _DebugLightingMode == DEBUGLIGHTINGMODE_SCREEN_SPACE_TRACING_REFLECTION
-                                    && !any(int2(_MouseClickPixelCoord.xy) - int2(positionTXS));
-#endif
-
-    ScreenSpaceRaymarchInput ssRayInput = CreateScreenSpaceHiZRaymarchInput(
-        rayOriginWS,
-        rayDirWS,
-        positionTXS
+    _SSReflectionRayHitNextTexture[positionSS] = outputPayload;
 #ifdef DEBUG_DISPLAY
-        , debug
+    _DebugTexture[positionSS] = float4(hit.debugOutput, 1);
 #endif
-    );
-    
-    float3 startPositionSS;
-    float3 raySS;
-    float rayEndDepth;
-    CalculateRaySS(
-        ssRayInput.rayOriginWS,
-        ssRayInput.rayDirWS,
-        uint2(_DepthPyramidSize.xy),
-        startPositionSS,
-        raySS,
-        rayEndDepth
-    );
-
-    uint4 payload = uint4(0, 0, 0, 0);
-    EncodeRayAllocation(startPositionSS, raySS, rayEndDepth, debug, payload);
-
-    _SSReflectionRayAllocationTexture[positionTXS] = payload;
 }
+#endif
+
 #endif

@@ -103,14 +103,12 @@ struct ScreenSpaceProxyRaycastInput
 // Utilities
 // -------------------------------------------------
 
-// Calculate the ray origin and direction in SS
-void CalculateRaySS(
+void CalculateRayEndPointSS(
     float3 rayOriginWS,             // Ray origin (World Space)
     float3 rayDirWS,                // Ray direction (World Space)
     uint2 bufferSize,               // Texture size of screen buffers
-    out float3 positionSS,          // (x, y, 1/linearDepth)
-    out float3 raySS,               // (dx, dy, d(1/linearDepth))
-    out float rayEndDepth           // Linear depth of the end point used to calculate raySS
+    out float3 startPositionSS,     // (x, y, 1/linearDepth)
+    out float3 endPositionSS        // (dx, dy, d(1/linearDepth))
 )
 {
     const float kNearClipPlane = -0.01;
@@ -132,21 +130,42 @@ void CalculateRaySS(
 
     float4 positionCS = ComputeClipSpacePosition(positionWS, worldToHClip);
     float4 rayEndCS = ComputeClipSpacePosition(rayEndWS, worldToHClip);
-    rayEndDepth = rayEndCS.w;
 
     float2 positionNDC = ComputeNormalizedDeviceCoordinates(positionWS, worldToHClip);
     float2 rayEndNDC = ComputeNormalizedDeviceCoordinates(rayEndWS, worldToHClip);
 
-    float3 rayStartSS = float3(
+    startPositionSS = float3(
         positionNDC.xy * bufferSize,
         1.0 / positionCS.w // Screen space depth interpolate properly in 1/z
     );
 
-    float3 rayEndSS = float3(
+    endPositionSS = float3(
         rayEndNDC.xy * bufferSize,
-        1.0 / rayEndDepth  // Screen space depth interpolate properly in 1/z
+        1.0 / rayEndCS.w  // Screen space depth interpolate properly in 1/z
+    );
+}
+
+// Calculate the ray origin and direction in SS
+void CalculateRaySS(
+    float3 rayOriginWS,             // Ray origin (World Space)
+    float3 rayDirWS,                // Ray direction (World Space)
+    uint2 bufferSize,               // Texture size of screen buffers
+    out float3 positionSS,          // (x, y, 1/linearDepth)
+    out float3 raySS,               // (dx, dy, d(1/linearDepth))
+    out float rayEndDepth           // Linear depth of the end point used to calculate raySS
+)
+{
+    float3 rayStartSS;
+    float3 rayEndSS;
+    CalculateRayEndPointSS(
+        rayOriginWS,
+        rayDirWS,
+        bufferSize,
+        rayStartSS,
+        rayEndSS
     );
 
+    rayEndDepth = 1.0 / rayEndSS.z;
     positionSS = rayStartSS;
     raySS = rayEndSS - rayStartSS;
 }
@@ -686,7 +705,6 @@ struct ScreenSpaceRaymarchInputPrecomputed
 {
     float3 startPositionSS;
     float3 raySS;
-    float rayEndDepth;
 
 #ifdef DEBUG_DISPLAY
     bool debug;
@@ -714,7 +732,7 @@ ScreenSpaceRaymarchInput CreateScreenSpaceHiZRaymarchInput(
     return ssRayInput;
 }
 
-bool ScreenSpaceHiZRaymarch(
+bool ScreenSpaceHiZRaymarchPrecomputed(
     ScreenSpaceRaymarchInputPrecomputed input,
     // Settings
     uint settingsRayMinLevel,                       // Minimum mip level to use for ray marching the depth buffer in HiZ
@@ -732,7 +750,6 @@ bool ScreenSpaceHiZRaymarch(
 {
     float3 startPositionSS  = input.startPositionSS;
     float3 raySS            = input.raySS;
-    float rayEndDepth       = input.rayEndDepth;
 
     const float2 CROSS_OFFSET = float2(1, 1);
 
@@ -1016,12 +1033,11 @@ bool ScreenSpaceHiZRaymarch(
     ScreenSpaceRaymarchInputPrecomputed preInput;
     preInput.startPositionSS    = startPositionSS;
     preInput.raySS              = raySS;
-    preInput.rayEndDepth        = rayEndDepth;
 #ifdef DEBUG_DISPLAY
     preInput.debug              = input.debug;
 #endif
 
-    return ScreenSpaceHiZRaymarch(
+    return ScreenSpaceHiZRaymarchPrecomputed(
         preInput,
         // Settings
         settingsRayMinLevel,
@@ -1172,13 +1188,13 @@ bool MERGE_NAME(ScreenSpaceHiZRaymarch, SSRTID)(
     );
 }
 
-bool MERGE_NAME(ScreenSpaceHiZRaymarch, SSRTID)(
+bool MERGE_NAME(ScreenSpaceHiZRaymarchPrecomputed, SSRTID)(
     ScreenSpaceRaymarchInputPrecomputed input,
     out ScreenSpaceRayHit hit,
     out float hitWeight
 )
 {
-    return ScreenSpaceHiZRaymarch(
+    return ScreenSpaceHiZRaymarchPrecomputed(
         input,
         // Settings
         SSRT_SETTING(RayMinLevel, SSRTID),

@@ -214,6 +214,7 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
                     );
             m_BufferPyramid = new BufferPyramid(bufferPyramidProcessor);
             m_ScreenSpaceReflectionRenderer = new ScreenSpaceReflectionRenderer(
+                new ScreenSpaceReflectionRenderer.Settings { MaxRayAllocation = 2560 * 1440 },
                 RTHandles.DefaultInstance,
                 asset.renderPipelineResources.screenSpaceReflectionsCS
             );
@@ -1164,7 +1165,6 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
                         }
                     }
 #endif
-                    PushFullScreenDebugTexture(hdCamera, cmd, m_CameraColorBuffer, FullScreenDebugMode.ScreenSpaceTracing);
                     // Caution: RenderDebug need to take into account that we have flip the screen (so anything capture before the flip will be flipped)
                     RenderDebug(hdCamera, cmd);
 
