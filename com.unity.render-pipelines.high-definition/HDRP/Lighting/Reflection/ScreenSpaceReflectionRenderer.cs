@@ -20,6 +20,7 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
             public static readonly int _SSReflectionRayHitNextTexture       = Shader.PropertyToID("_SSReflectionRayHitNextTexture");
             public static readonly int _SSReflectionRayHitNextSize          = Shader.PropertyToID("_SSReflectionRayHitNextSize");
             public static readonly int _SSReflectionRayHitNextScale         = Shader.PropertyToID("_SSReflectionRayHitNextScale");
+            public static readonly int _PayloadIndirect                     = Shader.PropertyToID("_PayloadIndirect");
             public static readonly int _Payload                             = Shader.PropertyToID("_Payload");
             public static readonly int _Payload1                            = Shader.PropertyToID("_Payload1");
             public static readonly int _Payload2                            = Shader.PropertyToID("_Payload2");
@@ -103,6 +104,7 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
         ComputeShader m_CS;
         CSMeta m_Kernels;
         RTHandleSystem m_RTHSystem;
+        ComputeBuffer m_DispatchIndirectBuffer;
         ComputeBuffer m_PayloadBuffer;
         ComputeBuffer m_Payload1Buffer;
         ComputeBuffer m_Payload2Buffer;
@@ -121,12 +123,18 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
             m_Settings = settings;
         }
 
-        public void AllocateBuffers()
+        public void AllocateBuffers(RenderPipelineSettings settings)
         {
-            m_PayloadBuffer = new ComputeBuffer(
-                m_Settings.MaxRayAllocation + 3, 
+            // TODO: Allocate HiZ buffer only if supported
+            m_DispatchIndirectBuffer = new ComputeBuffer(
+                3,
                 Marshal.SizeOf(typeof(uint)), 
                 ComputeBufferType.IndirectArguments
+            );
+            m_PayloadBuffer = new ComputeBuffer(
+                m_Settings.MaxRayAllocation, 
+                Marshal.SizeOf(typeof(uint)), 
+                ComputeBufferType.Default
             );
             m_Payload1Buffer = new ComputeBuffer(
                 m_Settings.MaxRayAllocation, 
@@ -147,6 +155,8 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
 
         public void ReleaseBuffers()
         {
+            m_DispatchIndirectBuffer.Release();
+            m_DispatchIndirectBuffer = null;
             m_PayloadBuffer.Release();
             m_PayloadBuffer = null;
             m_Payload1Buffer.Release();
@@ -240,7 +250,7 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
                     cmd.DispatchCompute(
                         m_CS,
                         kernel,
-                        m_PayloadBuffer,
+                        m_DispatchIndirectBuffer,
                         0
                     );
                 }
@@ -279,6 +289,18 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
                 cmd.SetComputeBufferParam(
                     m_CS,
                     kernel,
+                    CSMeta._PayloadIndirect,
+                    m_DispatchIndirectBuffer
+                );
+                cmd.SetComputeBufferParam(
+                    m_CS,
+                    kernel,
+                    CSMeta._Payload,
+                    m_PayloadBuffer
+                );
+                cmd.SetComputeBufferParam(
+                    m_CS,
+                    kernel,
                     CSMeta._Payload,
                     m_PayloadBuffer
                 );
@@ -301,7 +323,6 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
                 );
             }
         }
-
          void RenderPassClear(
             HDCamera hdCamera, 
             CommandBuffer cmd
@@ -315,8 +336,8 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
                 cmd.SetComputeBufferParam(
                     m_CS,
                     kernel,
-                    CSMeta._Payload,
-                    m_PayloadBuffer
+                    CSMeta._PayloadIndirect,
+                    m_DispatchIndirectBuffer
                 );
                 cmd.DispatchCompute(
                     m_CS,

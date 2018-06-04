@@ -316,7 +316,7 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
             }
 
             if (m_Asset.renderPipelineSettings.supportSSR)
-                m_ScreenSpaceReflectionRenderer.AllocateBuffers();
+                m_ScreenSpaceReflectionRenderer.AllocateBuffers(m_Asset.renderPipelineSettings);
 
             m_DistortionBuffer = RTHandles.Alloc(Vector2.one, filterMode: FilterMode.Point, colorFormat: Builtin.GetDistortionBufferFormat(), sRGB: Builtin.GetDistortionBufferSRGBFlag(), name: "Distortion");
 

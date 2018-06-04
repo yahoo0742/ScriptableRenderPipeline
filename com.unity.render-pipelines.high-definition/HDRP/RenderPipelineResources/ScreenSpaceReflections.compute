@@ -114,7 +114,7 @@ void DecodeSSRBuffer(uint2 positionSS, out float3 normalWS, out float perceptual
 // -------------------------------------------------
 #if PASS == PASS_CLEAR
 
-RWStructuredBuffer<uint>    _Payload;
+RWBuffer<uint>      _PayloadIndirect;
 
 [numthreads(1, 1, 1)]
 void KNAME(
@@ -123,9 +123,9 @@ void KNAME(
 )
 {
     // Clear allocated dispatch indirect buffer
-    _Payload[0] = 0;
-    _Payload[1] = 1;
-    _Payload[2] = 1;
+    _PayloadIndirect[0] = 0;
+    _PayloadIndirect[1] = 1;
+    _PayloadIndirect[2] = 1;
 }
 
 // #################################################
@@ -136,9 +136,10 @@ void KNAME(
 // -------------------------------------------------
 #elif PASS == PASS_ALLOCATE_RAYS
 
-RWStructuredBuffer<uint>    _Payload;
-RWBuffer<float4>            _Payload1;
-RWBuffer<float4>            _Payload2;
+RWBuffer<uint>                  _PayloadIndirect;
+RWBuffer<uint>                  _Payload;  // Indirect argument must be in Buffer
+RWStructuredBuffer<float4>      _Payload1; // Must use a StructuredBuffer here otherwise, swizzlign is incorrect for PS4
+RWStructuredBuffer<float4>      _Payload2; // Must use a StructuredBuffer here otherwise, swizzlign is incorrect for PS4
 
 // -------------------------------------------------
 // Entry point: Allocate Rays
@@ -150,12 +151,12 @@ void KNAME(
 )
 {
     if (groupThreadId == 0)
-        InterlockedAdd(_Payload[0], 1);
+        InterlockedAdd(_PayloadIndirect[0], 1);
 
     groupThreadId &= GROUP_SIZE_2D - 1;
 
     uint groupPerRow        = uint(ceil(_ScreenSize.x / GROUP_SIZE_1D));
-    uint index              = groupThreadId + (groupId.y * groupPerRow + groupId.x) * GROUP_SIZE_2D + 3;
+    uint index              = groupThreadId + (groupId.y * groupPerRow + groupId.x) * GROUP_SIZE_2D;
     uint2 groupCoord        = groupId * GROUP_SIZE_1D;
     uint2 groupThreadCoord  = DecodeMorton2D(groupThreadId);
     uint2 positionSS        = groupCoord + groupThreadCoord;
@@ -189,7 +190,7 @@ void KNAME(
 
     _Payload[index]     = EncodeAllocationPayload(allocationPayload);
     _Payload1[index]    = float4(startPositionSS, 1);
-    _Payload2[index]    = endPositionSS.xyzz;
+    _Payload2[index]    = float4(endPositionSS, 1);
 }
 
 // #################################################
@@ -286,9 +287,9 @@ void KNAME(
 // -------------------------------------------------
 #elif PROJECTIONMODEL == PROJECTIONMODEL_HI_Z
 
-StructuredBuffer<uint>      _Payload;
-Buffer<float4>    _Payload1;
-Buffer<float4>    _Payload2;
+Buffer<uint>                _Payload;
+StructuredBuffer<float4>    _Payload1; // Must use a StructuredBuffer here otherwise, swizzlign is incorrect for PS4
+StructuredBuffer<float4>    _Payload2; // Must use a StructuredBuffer here otherwise, swizzlign is incorrect for PS4
 Texture2D<uint4>            _SSReflectionRayAllocationTexture;
 
 [numthreads(GROUP_SIZE_2D, 1, 1)]
