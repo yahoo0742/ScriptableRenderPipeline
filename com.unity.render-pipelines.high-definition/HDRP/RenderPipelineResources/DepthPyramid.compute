@@ -18,8 +18,8 @@
 // Texture buffers
 // ------------------------------------------------
 
-Texture2D<float2> _Source;
-RW_TEXTURE2D(float2, _Result);
+Texture2D<float> _Source;
+RW_TEXTURE2D(float, _Result);
 
 SamplerState sampler_PointClamp;    //TODO: could we use min-sampler instead of using ALU?
 
@@ -37,10 +37,8 @@ CBUFFER_END
 
 #if UNITY_REVERSED_Z
 # define MIN_DEPTH(l, r) max(l, r)
-# define MAX_DEPTH(l, r) min(l, r)
 #else
 # define MIN_DEPTH(l, r) min(l, r)
-# define MAX_DEPTH(l, r) max(l, r)
 #endif
 
 [numthreads(KERNEL_SIZE, KERNEL_SIZE, 1)]
@@ -63,12 +61,10 @@ void KERNEL_NAME(uint2 groupId : SV_GroupID, uint2 groupThreadId : SV_GroupThrea
 
     // Select the nearest sample
     float minDepth = MIN_DEPTH(MIN_DEPTH(depths.x, depths.y), MIN_DEPTH(depths.z, depths.w));
-    float maxDepth = MAX_DEPTH(MAX_DEPTH(depths.x, depths.y), MAX_DEPTH(depths.z, depths.w));
 
     // Write to the final target
     uint2 dstPixel = (_RectOffset >> 1) + dispatchThreadId;
-    _Result[dstPixel] = float2(minDepth, maxDepth);
+    _Result[dstPixel] = minDepth;
 }
 
 #undef MIN_DEPTH
-#undef MAX_DEPTH

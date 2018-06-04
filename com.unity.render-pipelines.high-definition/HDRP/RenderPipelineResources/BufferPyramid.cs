@@ -164,7 +164,7 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
             return rtHandleSystem.Alloc(
                 size => CalculatePyramidSize(size),
                 filterMode: FilterMode.Trilinear,
-                colorFormat: RenderTextureFormat.RGFloat,
+                colorFormat: RenderTextureFormat.RHalf,
                 sRGB: false,
                 useMipMap: true,
                 autoGenerateMips: false,
