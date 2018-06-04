@@ -804,7 +804,7 @@ bool ScreenSpaceHiZRaymarchPrecomputed(
         float2 distanceToCellAxes = CalculateDistanceToCellPlanes(
             positionSS,
             raySS,
-            int2(positionSS.xy / (1 << currentLevel)),
+            int2(positionSS.xy ),
             cellPlanes
         );
 

@@ -148,11 +148,12 @@ void KNAME(
 
     groupThreadId &= GROUP_SIZE_2D - 1;
 
-    uint groupPerRow        = uint(ceil(_ScreenSize.x / GROUP_SIZE_1D));
-    uint index              = groupThreadId + (groupId.y * groupPerRow + groupId.x) * GROUP_SIZE_2D;
-    uint2 groupCoord        = groupId * GROUP_SIZE_1D;
-    uint2 groupThreadCoord  = DecodeMorton2D(groupThreadId);
-    uint2 positionSS        = groupCoord + groupThreadCoord;
+    uint groupPerRow            = uint(ceil(float(uint(_ScreenSize.x) >> _SSReflectionMipResolution) / GROUP_SIZE_1D));
+    uint index                  = groupThreadId + (groupId.y * groupPerRow + groupId.x) * GROUP_SIZE_2D;
+    uint2 groupCoord            = groupId * GROUP_SIZE_1D;
+    uint2 groupThreadCoord      = DecodeMorton2D(groupThreadId);
+    uint2 positionTXS           = groupCoord + groupThreadCoord;
+    uint2 positionSS            = positionTXS << _SSReflectionMipResolution;
 
     // Decode Buffer
     float depth                 = LOAD_TEXTURE2D_LOD(_DepthPyramidTexture, positionSS, 0).x;
@@ -164,8 +165,8 @@ void KNAME(
     DecodeSSRBuffer(positionSS, normalWS, perceptualRoughness);
 
     // Calculate ray endpoints
-    float3 rayOriginWS              = positionWS;
-    float3 rayDirWS                 = reflect(-V, normalWS);
+    float3 rayOriginWS          = positionWS;
+    float3 rayDirWS             = reflect(-V, normalWS);
 
     float3 startPositionSS;
     float3 endPositionSS;
@@ -181,9 +182,9 @@ void KNAME(
     AllocationPayload allocationPayload;
     allocationPayload.positionSS = positionSS;
 
-    _Payload[index]     = EncodeAllocationPayload(allocationPayload);
-    _Payload1[index]    = float4(startPositionSS, perceptualRoughness);
-    _Payload2[index]    = float4(endPositionSS, 1);
+    _Payload[index]             = EncodeAllocationPayload(allocationPayload);
+    _Payload1[index]            = float4(startPositionSS, perceptualRoughness);
+    _Payload2[index]            = float4(endPositionSS, 1);
 }
 
 // #################################################
@@ -194,9 +195,9 @@ void KNAME(
 #elif PASS == PASS_CAST_RAYS
 
 // Resources
-RW_TEXTURE2D(uint4, _SSReflectionRayHitNextTexture);
+RW_TEXTURE2D(uint4,         _SSReflectionRayHitNextTexture);
 #ifdef DEBUG_DISPLAY
-RW_TEXTURE2D(float4, _DebugTexture);
+RW_TEXTURE2D(float4,        _DebugTexture);
 #endif
 
 Buffer<uint>                _Payload;
@@ -214,6 +215,7 @@ void KNAME(
     // Read allocation payload
     AllocationPayload allocation    = DecodeAllocationPayload(_Payload[index]);
     uint2 positionSS                = allocation.positionSS;
+    uint2 positionTXS               = positionSS >> _SSReflectionMipResolution;
     float3 startRayPositionSS       = _Payload1[index].xyz;
     float perceptualRoughness       = _Payload1[index].w;
     float3 endRayPositionSS         = _Payload2[index].xyz;
@@ -222,8 +224,8 @@ void KNAME(
     // Screen space tracing query
     ScreenSpaceRayHit hit;
     ZERO_INITIALIZE(ScreenSpaceRayHit, hit);
-    bool hitSuccessful = false;
-    float hitWeight = 1;
+    bool hitSuccessful              = false;
+    float hitWeight                 = 1;
 
     ScreenSpaceRaymarchInputPrecomputed ssRayInput;
     ssRayInput.startPositionSS      = startRayPositionSS;
@@ -238,7 +240,7 @@ void KNAME(
     uint4 outputPayload = uint4(0, 0, 0, 0);
     EncodeRayHit(hit.positionSS, hit.positionNDC, hitWeight, hitSuccessful, perceptualRoughness, outputPayload);
 
-    _SSReflectionRayHitNextTexture[positionSS] = outputPayload;
+    _SSReflectionRayHitNextTexture[positionTXS] = outputPayload;
 #ifdef DEBUG_DISPLAY
     _DebugTexture[positionSS] = float4(hit.debugOutput, 1);
 #endif
@@ -253,10 +255,10 @@ void KNAME(
 #elif PASS == PASS_RESOLVE
 
 // Resources
-Texture2D<uint4> _SSReflectionRayHitNextTexture;
-RW_TEXTURE2D(float4, _SSReflectionResolveNextTexture);
+Texture2D<uint4>            _SSReflectionRayHitNextTexture;
+RW_TEXTURE2D(float4,        _SSReflectionResolveNextTexture);
 #ifdef DEBUG_DISPLAY
-RW_TEXTURE2D(float4, _DebugTexture);
+RW_TEXTURE2D(float4,        _DebugTexture);
 #endif
 
 [numthreads(GROUP_SIZE_2D, 1, 1)]
@@ -265,18 +267,19 @@ void KNAME(
     uint  groupThreadId     : SV_GroupThreadID
 )
 {
-    uint groupPerRow            = uint(ceil(_ScreenSize.x / GROUP_SIZE_1D));
+    uint groupPerRow            = uint(ceil(float(uint(_ScreenSize.x) >> _SSReflectionMipResolution) / GROUP_SIZE_1D));
     uint index                  = groupThreadId + (groupId.y * groupPerRow + groupId.x) * GROUP_SIZE_2D;
     uint2 groupCoord            = groupId * GROUP_SIZE_1D;
     uint2 groupThreadCoord      = DecodeMorton2D(groupThreadId);
-    uint2 positionSS            = groupCoord + groupThreadCoord;
+    uint2 positionTXS           = groupCoord + groupThreadCoord;
+    uint2 positionSS            = positionTXS << _SSReflectionMipResolution;
     float perceptualRoughness   = 0;
     uint2 hitPositionSS         = uint2(0, 0);
     float2 hitPositionNDC       = float2(0, 0);
     float hitWeight             = 0;
     bool hitSuccessful          = false;
     
-    uint4 payload = asuint(LOAD_TEXTURE2D_LOD(_SSReflectionRayHitTexture, positionSS, 0));
+    uint4 payload = asuint(LOAD_TEXTURE2D_LOD(_SSReflectionRayHitTexture, positionTXS, 0));
     DecodeRayHit(payload, hitPositionSS, hitPositionNDC, hitWeight, hitSuccessful, perceptualRoughness);
 
     int mipLevel                = PositivePow(perceptualRoughness, 0.8) * uint(max(_ColorPyramidScale.z - 1, 0));
@@ -286,11 +289,11 @@ void KNAME(
             weightNDC = weightNDC * weightNDC * (3 - 2 * weightNDC);
     // TODO: Fade pixels with normal non facing the ray direction
     // TODO: Fade pixels marked as foreground in stencil
-    float weight = weightNDC.x * weightNDC.y * hitWeight;
+    float weight = weightNDC.x * weightNDC.y * hitWeight * hitSuccessful;
 
     if (weight == 0)
     {
-        _SSReflectionResolveNextTexture[positionSS] = 0;
+        _SSReflectionResolveNextTexture[positionTXS] = 0;
         return;
     }
 
@@ -363,7 +366,7 @@ void KNAME(
     }
 #endif
 
-    _SSReflectionResolveNextTexture[positionSS] = color;
+    _SSReflectionResolveNextTexture[positionTXS] = color;
 }
 
 #endif

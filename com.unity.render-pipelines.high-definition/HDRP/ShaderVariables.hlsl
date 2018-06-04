@@ -287,6 +287,8 @@ float4  _CameraMotionVectorsSize;       // (x,y) = Actual Pixel Size, (z,w) = 1 
 float4  _CameraMotionVectorsScale;      // (x,y) = Screen Scale, z = lod count, w = unused
 float4  _SSReflectionRayHitSize;        // (x,y) = Actual Pixel Size, (z,w) = 1 / Actual Pixel Size
 float4  _SSReflectionRayHitScale;       // (x,y) = Screen Scale, z = lod count, w = unused
+float4  _SSReflectionResolveSize;       // (x,y) = Actual Pixel Size, (z,w) = 1 / Actual Pixel Size
+float4  _SSReflectionResolveScale;      // (x,y) = Screen Scale, z = lod count, w = unused
 
                                 // Screen space lighting
 float   _SSRefractionInvScreenWeightDistance;     // Distance for screen space smoothstep with fallback
@@ -295,6 +297,7 @@ int     _SSReflectionEnabled;
 int     _SSReflectionProjectionModel;
 int     _SSReflectionHiZRayMarchBehindObject;
 int     _SSRefractionHiZRayMarchBehindObject;
+int     _SSReflectionMipResolution;
 float4  _ViewMatrixZRow;
 
                                                 // Ambiant occlusion

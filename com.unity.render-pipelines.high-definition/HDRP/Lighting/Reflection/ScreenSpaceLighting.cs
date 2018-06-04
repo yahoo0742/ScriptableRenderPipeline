@@ -17,8 +17,8 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
         int m_RayMarchBehindObjectsID;
 
         public IntParameter                 rayLevel = new IntParameter(2);
-        public IntParameter                 rayMinLevel = new IntParameter(2);
-        public IntParameter                 rayMaxLevel = new IntParameter(6);
+        public IntParameter                 rayMinLevel = new IntParameter(2); // TODO: Move this in HDRenderPipeline
+        public IntParameter                 rayMaxLevel = new IntParameter(6); // TODO: Move this in HDRenderPipeline
         public IntParameter                 rayMaxIterations = new IntParameter(32);
         public FloatParameter               depthBufferThickness = new FloatParameter(1f);
         public ClampedFloatParameter        screenWeightDistance = new ClampedFloatParameter(0.1f, 0, 1);
