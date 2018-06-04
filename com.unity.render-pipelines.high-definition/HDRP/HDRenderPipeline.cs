@@ -214,7 +214,7 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
                     );
             m_BufferPyramid = new BufferPyramid(bufferPyramidProcessor);
             m_ScreenSpaceReflectionRenderer = new ScreenSpaceReflectionRenderer(
-                new ScreenSpaceReflectionRenderer.Settings { MaxRayAllocation = 2560 * 1440, ResolutionMip = 2 }, // TODO: Expose this in HDRenderPipeline
+                new ScreenSpaceReflectionRenderer.Settings { MaxRayAllocation = 2560 * 1440, ResolutionMip = 0 }, // TODO: Expose this in HDRenderPipeline
                 RTHandles.DefaultInstance,
                 asset.renderPipelineResources.screenSpaceReflectionsCS
             );

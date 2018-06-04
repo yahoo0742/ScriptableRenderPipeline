@@ -50,6 +50,7 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
         SSRClear,
         SSRAllocateRays,
         SSRCastRays,
+        SSRResolve,
 
         // Profile sampler for tile pass
         TPPrepareLightsForGPU,

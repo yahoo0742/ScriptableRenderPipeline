@@ -325,20 +325,21 @@ float SampleBayer4(uint2 positionSS)
 #endif
 }
 
-void PackRayHit(uint2 hitPositionSS, float2 hitPositionNDC, float hitWeight, bool hitSuccessful, out uint4 payload)
+void EncodeRayHit(uint2 hitPositionSS, float2 hitPositionNDC, float hitWeight, bool hitSuccessful, float perceptualRoughness, out uint4 payload)
 {
     payload.x = hitPositionSS.x | ((hitPositionSS.y) << 16);
     payload.y = f32tof16(hitPositionNDC.x) | (f32tof16(hitPositionNDC.y) << 16);
     payload.z = f32tof16(hitWeight) | ((hitSuccessful ? 0 : 1) << 16);
-    payload.w = 0;
+    payload.w = asuint(perceptualRoughness);
 }
 
-void UnpackRayHit(uint4 payload, out uint2 hitPositionSS, out float2 hitPositionNDC, out float hitWeight, out bool hitSuccessful)
+void DecodeRayHit(uint4 payload, out uint2 hitPositionSS, out float2 hitPositionNDC, out float hitWeight, out bool hitSuccessful, out float perceptualRoughness)
 {
     hitPositionSS = uint2(payload.x & 0xFFFF, payload.x >> 16);
     hitPositionNDC = float2(f16tof32(payload.y & 0xFFFF), f16tof32(payload.y >> 16));
     hitWeight = f16tof32(payload.z & 0xFFFF);
     hitSuccessful = ((payload.z >> 16) & 1) == 0;
+    perceptualRoughness = asfloat(payload.w);
 }
 
 // -------------------------------------------------

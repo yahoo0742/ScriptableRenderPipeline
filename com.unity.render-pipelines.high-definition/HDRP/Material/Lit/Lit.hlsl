@@ -1753,6 +1753,21 @@ IndirectLighting EvaluateBSDF_SSLighting(LightLoopContext lightLoopContext,
     }
 #endif
 
+    if (GPUImageBasedLightingType == GPUIMAGEBASEDLIGHTINGTYPE_REFLECTION
+        && _SSReflectionProjectionModel == PROJECTIONMODEL_HI_Z)
+    {
+        // Read resolve texture
+        float4 color = LOAD_TEXTURE2D_LOD(_SSReflectionResolveTexture, posInput.positionSS, 0);
+        float weight = color.a;
+
+        // We use specularFGD as an approximation of the fresnel effect (that also handle smoothness)
+        float3 F = preLightData.specularFGD;
+
+        lighting.specularReflected = F * color.rgb * weight;
+        UpdateLightingHierarchyWeights(hierarchyWeight, weight);
+        return lighting;
+    }
+
     bool hitSuccessful              = false;
     float2 hitPositionNDC           = float2(0, 0);
     uint2 hitPositionSS             = uint2(0, 0);
@@ -1845,44 +1860,37 @@ IndirectLighting EvaluateBSDF_SSLighting(LightLoopContext lightLoopContext,
 #endif
     if (GPUImageBasedLightingType == GPUIMAGEBASEDLIGHTINGTYPE_REFLECTION)
     {
-        projectionModel                 = _SSReflectionProjectionModel;
-        invScreenWeightDistance         = _SSReflectionInvScreenWeightDistance;
-        mipLevel                        = PositivePow(preLightData.iblPerceptualRoughness, 0.8) * uint(max(_ColorPyramidScale.z - 1, 0));
-        // Read raycast results
-        uint4 payload = asuint(LOAD_TEXTURE2D_LOD(_SSReflectionRayHitTexture, posInput.positionSS, 0));
-        UnpackRayHit(payload, hitPositionSS, hitPositionNDC, hitWeight, hitSuccessful);
-
-#ifdef DEBUG_DISPLAY
-        debugMode = DEBUGLIGHTINGMODE_SCREEN_SPACE_TRACING_REFLECTION;
-        if (_DebugLightingMode == debugMode)
+        projectionModel                     = _SSReflectionProjectionModel;
+        if (projectionModel == PROJECTIONMODEL_PROXY)
         {
-            bool applyDebug = true;
-            float3 debugColor = float3(0, 0, 0);
-            switch (_DebugLightingSubMode)
-            {
-                case DEBUGSCREENSPACETRACING_HIT_SUCCESS:
-                    debugColor = float3(1, hitSuccessful ? 1 : 0, 0);
-                    break;
-                case DEBUGSCREENSPACETRACING_HI_ZHIT_WEIGHT:
-                    debugColor = float3(1, 1, 1) * hitWeight;
-                    break;
-                case DEBUGSCREENSPACETRACING_HI_ZPOSITION_NDC:
-                    debugColor = float3(hitPositionNDC.x, hitPositionNDC.y, 0.5);
-                    break;
-                default:
-                    applyDebug = false;
-                    break;
-            }
+            // -------------------------------
+            // Initialize screen space tracing
+            // -------------------------------
+            float3 rayOriginWS              = posInput.positionWS;
+            float3 rayDirWS                 = reflect(-V, bsdfData.normalWS);
 
-            if (applyDebug)
-            {
-                float weight = 1.0;
-                UpdateLightingHierarchyWeights(hierarchyWeight, weight);
-                lighting.specularReflected = debugColor;
-                return lighting;
-            }
-        }
+#if DEBUG_DISPLAY
+            bool debug                      = _DebugLightingMode == DEBUGLIGHTINGMODE_SCREEN_SPACE_TRACING_REFLECTION
+                                            && !any(int2(_MouseClickPixelCoord.xy) - int2(posInput.positionSS));
 #endif
+
+            // -------------------------------
+            // Screen space tracing query
+            // -------------------------------
+            ScreenSpaceRayHit hit;
+            ZERO_INITIALIZE(ScreenSpaceRayHit, hit);
+            bool hitSuccessful = false;
+
+            ScreenSpaceProxyRaycastInput ssRayInput = CreateScreenSpaceProxyRaycastInput(
+                rayOriginWS + rayDirWS * SampleBayer4(posInput.positionSS + uint2(_FrameCount, uint(_FrameCount) / 4u)) * 0.1,
+                rayDirWS,
+                envLightData
+#ifdef DEBUG_DISPLAY
+                , debug
+#endif
+            );
+            hitSuccessful = ScreenSpaceProxyRaycastReflection(ssRayInput, hit);
+        }
     }
 
     if (!hitSuccessful)

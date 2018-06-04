@@ -23,8 +23,9 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
 
         struct CSMeta
         {
-            static readonly Lit.ProjectionModel[] k_SupportedProjectionModels = { Lit.ProjectionModel.HiZ, Lit.ProjectionModel.Proxy };
-
+            public static readonly int _SSReflectionResolveNextTexture      = Shader.PropertyToID("_SSReflectionResolveNextTexture");
+            public static readonly int _SSReflectionResolveNextSize         = Shader.PropertyToID("_SSReflectionResolveNextSize");
+            public static readonly int _SSReflectionResolveNextScale        = Shader.PropertyToID("_SSReflectionResolveNextScale");
             public static readonly int _SSReflectionRayHitNextTexture       = Shader.PropertyToID("_SSReflectionRayHitNextTexture");
             public static readonly int _SSReflectionRayHitNextSize          = Shader.PropertyToID("_SSReflectionRayHitNextSize");
             public static readonly int _SSReflectionRayHitNextScale         = Shader.PropertyToID("_SSReflectionRayHitNextScale");
@@ -34,70 +35,44 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
             public static readonly int _Payload2                            = Shader.PropertyToID("_Payload2");
             public const int KAllocateRay_KernelSize = 8;
             public const int KCastRay_KernelSize = 8;
+            public const int KResolve_KernelSize = 8;
 
-            Vector3Int[]         m_KCastRays_NumThreads;
-            int[]                m_KCastRays;
-            Vector3Int[]         m_KCastRaysDebug_NumThreads;
-            int[]                m_KCastRaysDebug;
-            public Vector3Int           KAllocateRays_NumThreads;
-            public int                  KAllocateRays;
             public Vector3Int           KClear_NumThreads;
             public int                  KClear;
+            public Vector3Int           KAllocateRays_NumThreads;
+            public int                  KAllocateRays;
+            Vector3Int                  m_KCastRays_NumThreads;
+            int                         m_KCastRays;
+            Vector3Int                  m_KCastRaysDebug_NumThreads;
+            int                         m_KCastRaysDebug;
+            public Vector3Int           KResolve_NumThreads;
+            public int                  KResolve;
 
             public int GetKCastRays(
-                Lit.ProjectionModel projectionModel, 
                 bool debug
             )
             {
                 return debug
-                    ? m_KCastRaysDebug[(int)projectionModel]
-                    : m_KCastRays[(int)projectionModel];
+                    ? m_KCastRaysDebug
+                    : m_KCastRays;
             }
 
             public Vector3Int GetKCastRays_NumThreads(
-                Lit.ProjectionModel projectionModel, 
                 bool debug
             )
             {
                 return debug
-                    ? m_KCastRaysDebug_NumThreads[(int)projectionModel]
-                    : m_KCastRays_NumThreads[(int)projectionModel];
+                    ? m_KCastRaysDebug_NumThreads
+                    : m_KCastRays_NumThreads;
             }
 
             public void FindKernels(ComputeShader cs)
             {
-                m_KCastRays_NumThreads = new Vector3Int[(int)Lit.ProjectionModel.Count];
-                m_KCastRays = new int[(int)Lit.ProjectionModel.Count];
-                m_KCastRaysDebug_NumThreads = new Vector3Int[(int)Lit.ProjectionModel.Count];
-                m_KCastRaysDebug = new int[(int)Lit.ProjectionModel.Count];
-                FindKernel(
-                    cs,
-                    "KAllocateRays_HiZ",
-                    out KAllocateRays,
-                    ref KAllocateRays_NumThreads
-                );
-                FindKernel(
-                    cs,
-                    "KClear",
-                    out KClear,
-                    ref KClear_NumThreads
-                );
-
-                for (int i = 0, c = k_SupportedProjectionModels.Length; i < c; ++i)
-                {
-                    FindKernel(
-                        cs, 
-                        "KCastRays_" + k_SupportedProjectionModels[i], 
-                        out m_KCastRays[(int)k_SupportedProjectionModels[i]], 
-                        ref m_KCastRays_NumThreads[(int)k_SupportedProjectionModels[i]]
-                    );
-                    FindKernel(
-                        cs, 
-                        "KCastRays_Debug_" + k_SupportedProjectionModels[i], 
-                        out m_KCastRaysDebug[(int)k_SupportedProjectionModels[i]],
-                        ref m_KCastRaysDebug_NumThreads[(int)k_SupportedProjectionModels[i]]
-                    );
-                }
+                FindKernel(cs, "KClear", out KClear, ref KClear_NumThreads);
+                FindKernel(cs, "KAllocateRays_HiZ", out KAllocateRays, ref KAllocateRays_NumThreads);
+                FindKernel(cs, "KCastRays_HiZ", out m_KCastRays, ref m_KCastRays_NumThreads);
+                FindKernel(cs, "KCastRays_Debug_HiZ", out m_KCastRaysDebug, ref m_KCastRaysDebug_NumThreads);
+                FindKernel(cs, "KResolve", out KResolve, ref KResolve_NumThreads);
             }
 
             void FindKernel(ComputeShader cs, string name, out int id, ref Vector3Int threads)
@@ -112,7 +87,6 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
         ComputeShader m_CS;
         CSMeta m_Kernels;
         RTHandleSystem m_RTHSystem;
-        RTHandleSystem.RTHandle m_SSRColorResolveTexture;
         ComputeBuffer m_DispatchIndirectBuffer;
         ComputeBuffer m_PayloadBuffer;
         ComputeBuffer m_Payload1Buffer;
@@ -155,19 +129,20 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
                 Marshal.SizeOf(typeof(float)) * 4, 
                 ComputeBufferType.Default
             );
-            m_SSRColorResolveTexture = m_RTHSystem.Alloc(
-                new Vector2(1.0f / (1 << m_Settings.ResolutionMip), 1.0f / (1 << m_Settings.ResolutionMip)),
-                colorFormat: RenderTextureFormat.ARGBHalf,
-                enableRandomWrite: true,
-                autoGenerateMips: false,
-                useMipMap: false
-            );
+        }
+
+        public void AllocateCameraBuffersIfRequired(HDCamera hdCamera)
+        {
+            if (hdCamera.GetCurrentFrameRT((int)HDCameraFrameHistoryType.SSReflectionRayHit) == null)
+                hdCamera.AllocHistoryFrameRT((int)HDCameraFrameHistoryType.SSReflectionRayHit, AllocateCameraBufferRayHit);
+
+            if (hdCamera.GetCurrentFrameRT((int)HDCameraFrameHistoryType.SSReflectionResolve) == null)
+                hdCamera.AllocHistoryFrameRT((int)HDCameraFrameHistoryType.SSReflectionResolve, AllocateCameraBufferResolve);
         }
 
         public void ClearBuffers(CommandBuffer cmd, HDCamera hdCamera)
         {
             RenderPassClear(hdCamera, cmd);
-            HDUtils.SetRenderTarget(cmd, hdCamera, m_SSRColorResolveTexture, ClearFlag.Color, Color.clear);
         }
 
         public void ReleaseBuffers()
@@ -180,7 +155,6 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
             m_Payload1Buffer = null;
             m_Payload2Buffer.Release();
             m_Payload2Buffer = null;
-            m_RTHSystem.Release(m_SSRColorResolveTexture);
         }
 
         public void PushGlobalParams(HDCamera hdCamera, CommandBuffer cmd, FrameSettings frameSettings)
@@ -211,98 +185,33 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
                 RenderPassAllocateRays(hdCamera, cmd, ssReflection);
 
             RenderPassCastRays(hdCamera, cmd, debug, debugTextureHandle, ssReflection);
+            RenderPassResolve(hdCamera, cmd, debug, debugTextureHandle, ssReflection);
         }
 
-        void RenderPassCastRays(
+        void RenderPassClear(
             HDCamera hdCamera, 
-            CommandBuffer cmd, 
-            bool debug,
-            RTHandleSystem.RTHandle debugTextureHandle,
-            ScreenSpaceReflection ssReflection
+            CommandBuffer cmd
         )
         {
-            var projectionModel     = (Lit.ProjectionModel)ssReflection.deferredProjectionModel.value;
+            var kernel              = m_Kernels.KClear;
+            var threadGroups        = new Vector3Int(1, 1, 1);
 
-            var kernel              = m_Kernels.GetKCastRays(projectionModel, debug);
-            var threadGroups        = new Vector3Int(
-                                        // We use 8x8 kernel for KCastRays
-                                        Mathf.CeilToInt((hdCamera.actualWidth) / (float)CSMeta.KCastRay_KernelSize),
-                                        Mathf.CeilToInt((hdCamera.actualHeight) / (float)CSMeta.KCastRay_KernelSize),
-                                        1
-                                    );
-
-            using (new ProfilingSample(cmd, "Screen Space Reflection - Cast Rays", CustomSamplerId.SSRCastRays.GetSampler()))
+            using (new ProfilingSample(cmd, "Screen Space Reflection - Clear Buffers", CustomSamplerId.SSRClear.GetSampler()))
             {
-                var currentRTHRayHit = hdCamera.GetCurrentFrameRT((int)HDCameraFrameHistoryType.SSReflectionRayHit);
-                Assert.IsNotNull(currentRTHRayHit);
-
-                if (debug)
-                {
-                    cmd.SetComputeTextureParam(
-                        m_CS,
-                        kernel,
-                        HDShaderIDs._DebugTexture,
-                        debugTextureHandle
-                    );
-                }
-
-                if (projectionModel == Lit.ProjectionModel.HiZ)
-                {
-                    cmd.SetComputeBufferParam(
-                        m_CS,
-                        kernel,
-                        CSMeta._Payload,
-                        m_PayloadBuffer
-                    );
-                    cmd.SetComputeBufferParam(
-                        m_CS,
-                        kernel,
-                        CSMeta._Payload1,
-                        m_Payload1Buffer
-                    );
-                    cmd.SetComputeBufferParam(
-                        m_CS,
-                        kernel,
-                        CSMeta._Payload2,
-                        m_Payload2Buffer
-                    );
-                }
-                
-                cmd.SetComputeRTHandleParam(
+                cmd.SetComputeBufferParam(
                     m_CS,
                     kernel,
-                    currentRTHRayHit,
-                    CSMeta._SSReflectionRayHitNextTexture,
-                    CSMeta._SSReflectionRayHitNextSize,
-                    CSMeta._SSReflectionRayHitNextScale
+                    CSMeta._PayloadIndirect,
+                    m_DispatchIndirectBuffer
                 );
-                if (projectionModel == Lit.ProjectionModel.HiZ)
-                {
-                    cmd.DispatchCompute(
-                        m_CS,
-                        kernel,
-                        m_DispatchIndirectBuffer,
-                        0
-                    );
-                }
-                else
-                {
-                    cmd.DispatchCompute(
-                        m_CS,
-                        kernel,
-                        threadGroups.x, threadGroups.y, threadGroups.z
-                    );
-                }
-                
-                cmd.SetGlobalRTHandle(
-                    currentRTHRayHit,
-                    HDShaderIDs._SSReflectionRayHitTexture,
-                    HDShaderIDs._SSReflectionRayHitSize,
-                    HDShaderIDs._SSReflectionRayHitScale
+                cmd.DispatchCompute(
+                    m_CS,
+                    kernel,
+                    threadGroups.x, threadGroups.y, threadGroups.z
                 );
             }
         }
-
+        
         void RenderPassAllocateRays(
             HDCamera hdCamera, 
             CommandBuffer cmd,
@@ -355,34 +264,94 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
                 );
             }
         }
-         void RenderPassClear(
+
+        void RenderPassCastRays(
             HDCamera hdCamera, 
-            CommandBuffer cmd
+            CommandBuffer cmd, 
+            bool debug,
+            RTHandleSystem.RTHandle debugTextureHandle,
+            ScreenSpaceReflection ssReflection
         )
         {
-            var kernel              = m_Kernels.KClear;
-            var threadGroups        = new Vector3Int(1, 1, 1);
+            var projectionModel     = (Lit.ProjectionModel)ssReflection.deferredProjectionModel.value;
 
-            using (new ProfilingSample(cmd, "Screen Space Reflection - Clear Buffers", CustomSamplerId.SSRClear.GetSampler()))
+            var kernel              = m_Kernels.GetKCastRays(debug);
+            var threadGroups        = new Vector3Int(
+                                        // We use 8x8 kernel for KCastRays
+                                        Mathf.CeilToInt((hdCamera.actualWidth) / (float)CSMeta.KCastRay_KernelSize),
+                                        Mathf.CeilToInt((hdCamera.actualHeight) / (float)CSMeta.KCastRay_KernelSize),
+                                        1
+                                    );
+
+            using (new ProfilingSample(cmd, "Screen Space Reflection - Cast Rays", CustomSamplerId.SSRCastRays.GetSampler()))
             {
-                cmd.SetComputeBufferParam(
-                    m_CS,
-                    kernel,
-                    CSMeta._PayloadIndirect,
-                    m_DispatchIndirectBuffer
+                var currentRTHRayHit = hdCamera.GetCurrentFrameRT((int)HDCameraFrameHistoryType.SSReflectionRayHit);
+                Assert.IsNotNull(currentRTHRayHit);
+
+                if (debug)
+                    cmd.SetComputeTextureParam(m_CS, kernel, HDShaderIDs._DebugTexture, debugTextureHandle);
+
+                cmd.SetComputeBufferParam(m_CS, kernel, CSMeta._Payload, m_PayloadBuffer);
+                cmd.SetComputeBufferParam(m_CS, kernel, CSMeta._Payload1, m_Payload1Buffer);
+                cmd.SetComputeBufferParam(m_CS, kernel, CSMeta._Payload2, m_Payload2Buffer);
+                
+                cmd.SetComputeRTHandleParam(
+                    m_CS, kernel, currentRTHRayHit, 
+                    CSMeta._SSReflectionRayHitNextTexture,
+                    CSMeta._SSReflectionRayHitNextSize,
+                    CSMeta._SSReflectionRayHitNextScale
                 );
-                cmd.DispatchCompute(
-                    m_CS,
-                    kernel,
-                    threadGroups.x, threadGroups.y, threadGroups.z
+
+                cmd.DispatchCompute(m_CS, kernel, m_DispatchIndirectBuffer, 0);
+                
+                cmd.SetGlobalRTHandle(
+                    currentRTHRayHit,
+                    HDShaderIDs._SSReflectionRayHitTexture,
+                    HDShaderIDs._SSReflectionRayHitSize,
+                    HDShaderIDs._SSReflectionRayHitScale
                 );
             }
         }
 
-        public void AllocateCameraBuffersIfRequired(HDCamera hdCamera)
+        void RenderPassResolve(
+            HDCamera hdCamera, 
+            CommandBuffer cmd, 
+            bool debug,
+            RTHandleSystem.RTHandle debugTextureHandle,
+            ScreenSpaceReflection ssReflection
+        )
         {
-            if (hdCamera.GetCurrentFrameRT((int)HDCameraFrameHistoryType.SSReflectionRayHit) == null)
-                hdCamera.AllocHistoryFrameRT((int)HDCameraFrameHistoryType.SSReflectionRayHit, AllocateCameraBufferRayHit);
+            var kernel              = m_Kernels.KResolve;
+            var threadGroups        = new Vector3Int(
+                                        Mathf.CeilToInt((hdCamera.actualWidth) / (float)CSMeta.KResolve_KernelSize),
+                                        Mathf.CeilToInt((hdCamera.actualHeight) / (float)CSMeta.KResolve_KernelSize),
+                                        1
+                                    );
+
+            using (new ProfilingSample(cmd, "Screen Space Reflection - Resolve", CustomSamplerId.SSRResolve.GetSampler()))
+            {
+                var currentResolveTexture = hdCamera.GetCurrentFrameRT((int)HDCameraFrameHistoryType.SSReflectionResolve);
+                Assert.IsNotNull(currentResolveTexture);
+
+                if (debug)
+                    cmd.SetComputeTextureParam(m_CS, kernel, HDShaderIDs._DebugTexture, debugTextureHandle);
+
+                cmd.SetComputeRTHandleParam(
+                    m_CS, kernel, currentResolveTexture,
+                    CSMeta._SSReflectionResolveNextTexture,
+                    CSMeta._SSReflectionResolveNextSize,
+                    CSMeta._SSReflectionResolveNextScale
+                );
+                
+                cmd.DispatchCompute(m_CS, kernel, threadGroups.x, threadGroups.y, threadGroups.z);
+                
+                cmd.SetGlobalRTHandle(
+                    currentResolveTexture,
+                    HDShaderIDs._SSReflectionResolveTexture,
+                    HDShaderIDs._SSReflectionResolveSize,
+                    HDShaderIDs._SSReflectionResolveScale
+                );
+            }
         }
 
         RTHandleSystem.RTHandle AllocateCameraBufferRayHit(string id, int frameIndex, RTHandleSystem rtHandleSystem)
@@ -396,6 +365,17 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
                 autoGenerateMips: false,
                 enableRandomWrite: true,
                 name: string.Format("SSRRayHit-{0}-{1}", id, frameIndex)
+            );
+        }
+
+        RTHandleSystem.RTHandle AllocateCameraBufferResolve(string id, int frameIndex, RTHandleSystem rtHandleSystem)
+        {
+            return rtHandleSystem.Alloc(
+                new Vector2(1.0f / (1 << m_Settings.ResolutionMip), 1.0f / (1 << m_Settings.ResolutionMip)),
+                colorFormat: RenderTextureFormat.ARGBHalf,
+                enableRandomWrite: true,
+                autoGenerateMips: false,
+                useMipMap: false
             );
         }
     }

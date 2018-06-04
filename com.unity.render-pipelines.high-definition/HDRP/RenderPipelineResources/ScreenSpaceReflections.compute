@@ -38,20 +38,13 @@
 // -------------------------------------------------
 #pragma kernel KClear                       KNAME=KClear                    PASS=PASS_CLEAR
 #pragma kernel KAllocateRays_HiZ            KNAME=KAllocateRays_HiZ         PASS=PASS_ALLOCATE_RAYS
-#pragma kernel KCastRays_HiZ                KNAME=KCastRays_HiZ             PASS=PASS_CAST_RAYS         PROJECTIONMODEL=PROJECTIONMODEL_HI_Z
-#pragma kernel KCastRays_Proxy              KNAME=KCastRays_Proxy           PASS=PASS_CAST_RAYS         PROJECTIONMODEL=PROJECTIONMODEL_PROXY
-#pragma kernel KCastRays_Debug_HiZ          KNAME=KCastRays_Debug_HiZ       PASS=PASS_CAST_RAYS         PROJECTIONMODEL=PROJECTIONMODEL_HI_Z     DEBUG_DISPLAY
-#pragma kernel KCastRays_Debug_Proxy        KNAME=KCastRays_Debug_Proxy     PASS=PASS_CAST_RAYS         PROJECTIONMODEL=PROJECTIONMODEL_PROXY    DEBUG_DISPLAY
+#pragma kernel KCastRays_HiZ                KNAME=KCastRays_HiZ             PASS=PASS_CAST_RAYS
+#pragma kernel KCastRays_Debug_HiZ          KNAME=KCastRays_Debug_HiZ       PASS=PASS_CAST_RAYS         DEBUG_DISPLAY
+#pragma kernel KResolve                     KNAME=KResolve                  PASS=PASS_RESOLVE
 
 // -------------------------------------------------
 // Common includes of passes
 // -------------------------------------------------
-#if PROJECTIONMODEL == PROJECTIONMODEL_HI_Z && defined(PASS_CASTRAYS_USE_LDS)
-// Setup the function to load depth from LDS (only HiZ)
-#define LOAD_DEVICE_DEPTH(positionSS, level) LoadDeviceDepth(positionSS, level)
-float LoadDeviceDepth(uint2 positionSS, int level);
-#endif
-
 #include "CoreRP/ShaderLibrary/Common.hlsl"
 #include "CoreRP/ShaderLibrary/SpaceFillingCurves.hlsl"
 #define LIGHTLOOP_TILE_PASS 1
@@ -189,7 +182,7 @@ void KNAME(
     allocationPayload.positionSS = positionSS;
 
     _Payload[index]     = EncodeAllocationPayload(allocationPayload);
-    _Payload1[index]    = float4(startPositionSS, 1);
+    _Payload1[index]    = float4(startPositionSS, perceptualRoughness);
     _Payload2[index]    = float4(endPositionSS, 1);
 }
 
@@ -205,87 +198,6 @@ RW_TEXTURE2D(uint4, _SSReflectionRayHitNextTexture);
 #ifdef DEBUG_DISPLAY
 RW_TEXTURE2D(float4, _DebugTexture);
 #endif
-
-// CBuffers
-CBUFFER_START(UnityScreenSpaceReflections)
-float4 _SSReflectionRayHitNextSize;             // (x,y) = Actual Pixel Size, (z,w) = 1 / Actual Pixel Size
-float4 _SSReflectionRayHitNextScale;            // (x,y) = Screen Scale, z = lod count, w = unused
-
-#ifdef DEBUG_DISPLAY
-int     _SSRDebugMode;
-int     _SSRDebugMip;
-#endif
-CBUFFER_END
-
-// -------------------------------------------------
-// Entry point: Cast Rays (Proxy)
-// -------------------------------------------------
-#if PROJECTIONMODEL == PROJECTIONMODEL_PROXY
-[numthreads(GROUP_SIZE_2D, 1, 1)]
-void KNAME(
-    uint2 groupId       : SV_GroupID,
-    uint  groupThreadId : SV_DispatchThreadID
-)
-{
-    groupThreadId &= GROUP_SIZE_2D - 1;
-
-    uint2 groupCoord        = groupId * GROUP_SIZE_1D;
-    uint2 groupThreadCoord  = DecodeMorton2D(groupThreadId);
-    uint2 positionSS        = groupCoord + groupThreadCoord;
-
-    // Decode GBuffer
-    float depth                 = LOAD_TEXTURE2D_LOD(_DepthPyramidTexture, positionSS, 0).x;
-    PositionInputs posInput     = GetPositionInput(positionSS.xy, _ScreenSize.zw, depth, UNITY_MATRIX_I_VP, UNITY_MATRIX_V, int2(0, 0));
-    float3 V                    = GetWorldSpaceNormalizeViewDir(posInput.positionWS);
-    float3 positionWS           = posInput.positionWS;
-    float3 normalWS;
-    float perceptualRoughness;
-    DecodeSSRBuffer(positionSS, normalWS, perceptualRoughness);
-
-
-    // TODO: decode proxy data
-    EnvLightData envLightData;
-    ZERO_INITIALIZE(EnvLightData, envLightData);
-
-    // -------------------------------
-    // Initialize screen space tracing
-    // -------------------------------
-    float3 rayOriginWS              = positionWS;
-    float3 rayDirWS                 = reflect(-V, normalWS);
-
-#if DEBUG_DISPLAY
-    int debugMode                   = DEBUGLIGHTINGMODE_SCREEN_SPACE_TRACING_REFLECTION;
-    bool debug                      = _DebugLightingMode == debugMode
-                                    && !any(int2(_MouseClickPixelCoord.xy) - int2(positionSS));
-#endif
-
-    // -------------------------------
-    // Screen space tracing query
-    // -------------------------------
-    ScreenSpaceRayHit hit;
-    ZERO_INITIALIZE(ScreenSpaceRayHit, hit);
-    bool hitSuccessful = false;
-
-    ScreenSpaceProxyRaycastInput ssRayInput = CreateScreenSpaceProxyRaycastInput(
-        rayOriginWS + rayDirWS * SampleBayer4(positionSS + uint2(_FrameCount, uint(_FrameCount) / 4u)) * 0.1,
-        rayDirWS,
-        envLightData
-#ifdef DEBUG_DISPLAY
-        , debug
-#endif
-    );
-    hitSuccessful = ScreenSpaceProxyRaycastReflection(ssRayInput, hit);
-
-    uint4 payload = uint4(0, 0, 0, 0);
-    PackRayHit(hit.positionSS, hit.positionNDC, 1, hitSuccessful, payload);
-
-    _SSReflectionRayHitNextTexture[positionSS] = payload;
-}
-
-// -------------------------------------------------
-// Entry point: Cast Rays (HiZ)
-// -------------------------------------------------
-#elif PROJECTIONMODEL == PROJECTIONMODEL_HI_Z
 
 Buffer<uint>                _Payload;
 StructuredBuffer<float4>    _Payload1; // Must use a StructuredBuffer here otherwise, swizzlign is incorrect for PS4
@@ -303,6 +215,7 @@ void KNAME(
     AllocationPayload allocation    = DecodeAllocationPayload(_Payload[index]);
     uint2 positionSS                = allocation.positionSS;
     float3 startRayPositionSS       = _Payload1[index].xyz;
+    float perceptualRoughness       = _Payload1[index].w;
     float3 endRayPositionSS         = _Payload2[index].xyz;
     float3 raySS                    = endRayPositionSS - startRayPositionSS;
 
@@ -323,13 +236,134 @@ void KNAME(
     hitSuccessful = ScreenSpaceHiZRaymarchPrecomputedReflection(ssRayInput, hit, hitWeight);
 
     uint4 outputPayload = uint4(0, 0, 0, 0);
-    PackRayHit(hit.positionSS, hit.positionNDC, hitWeight, hitSuccessful, outputPayload);
+    EncodeRayHit(hit.positionSS, hit.positionNDC, hitWeight, hitSuccessful, perceptualRoughness, outputPayload);
 
     _SSReflectionRayHitNextTexture[positionSS] = outputPayload;
 #ifdef DEBUG_DISPLAY
     _DebugTexture[positionSS] = float4(hit.debugOutput, 1);
 #endif
 }
+
+
+// #################################################
+// Pass: Resolve
+// #################################################
+// Resolve the color in a specific buffer
+// -------------------------------------------------
+#elif PASS == PASS_RESOLVE
+
+// Resources
+Texture2D<uint4> _SSReflectionRayHitNextTexture;
+RW_TEXTURE2D(float4, _SSReflectionResolveNextTexture);
+#ifdef DEBUG_DISPLAY
+RW_TEXTURE2D(float4, _DebugTexture);
 #endif
+
+[numthreads(GROUP_SIZE_2D, 1, 1)]
+void KNAME(
+    uint2 groupId           : SV_GroupID,
+    uint  groupThreadId     : SV_GroupThreadID
+)
+{
+    uint groupPerRow            = uint(ceil(_ScreenSize.x / GROUP_SIZE_1D));
+    uint index                  = groupThreadId + (groupId.y * groupPerRow + groupId.x) * GROUP_SIZE_2D;
+    uint2 groupCoord            = groupId * GROUP_SIZE_1D;
+    uint2 groupThreadCoord      = DecodeMorton2D(groupThreadId);
+    uint2 positionSS            = groupCoord + groupThreadCoord;
+    float perceptualRoughness   = 0;
+    uint2 hitPositionSS         = uint2(0, 0);
+    float2 hitPositionNDC       = float2(0, 0);
+    float hitWeight             = 0;
+    bool hitSuccessful          = false;
+    
+    uint4 payload = asuint(LOAD_TEXTURE2D_LOD(_SSReflectionRayHitTexture, positionSS, 0));
+    DecodeRayHit(payload, hitPositionSS, hitPositionNDC, hitWeight, hitSuccessful, perceptualRoughness);
+
+    int mipLevel                = PositivePow(perceptualRoughness, 0.8) * uint(max(_ColorPyramidScale.z - 1, 0));
+
+    // Fade pixels near the texture buffers' borders
+    float2  weightNDC = clamp(min(hitPositionNDC, 1 - hitPositionNDC) * _SSReflectionInvScreenWeightDistance, 0, 1);
+            weightNDC = weightNDC * weightNDC * (3 - 2 * weightNDC);
+    // TODO: Fade pixels with normal non facing the ray direction
+    // TODO: Fade pixels marked as foreground in stencil
+    float weight = weightNDC.x * weightNDC.y * hitWeight;
+
+    if (weight == 0)
+    {
+        _SSReflectionResolveNextTexture[positionSS] = 0;
+        return;
+    }
+
+    // Reproject color pyramid
+    float4 color = float4(0, 0, 0, 0);
+    {
+        float4 hitVelocityBuffer = LOAD_TEXTURE2D_LOD(
+            _CameraMotionVectorsTexture,
+            hitPositionSS,
+            0.0
+        );
+
+        float2 hitVelocityNDC;
+        DecodeVelocity(hitVelocityBuffer, hitVelocityNDC);
+
+        color = SAMPLE_TEXTURE2D_LOD(
+            _ColorPyramidTexture,
+            s_trilinear_clamp_sampler,
+            // Offset by half a texel to properly interpolate between this pixel and its mips
+            (hitPositionNDC - hitVelocityNDC) * _ColorPyramidScale.xy + _ColorPyramidSize.zw * 0.5,
+            mipLevel
+        );
+    }
+    
+    // With HiZ, we use a temporal filtering to reduce the noise from the ray origin jittering
+    {
+        float temporalFilteringWeight   = 0.1;
+        float4 currentVelocityBuffer = LOAD_TEXTURE2D_LOD(
+            _CameraMotionVectorsTexture,
+            positionSS,
+            0.0
+        );
+
+        float2 currentVelocityNDC;
+        DecodeVelocity(currentVelocityBuffer, currentVelocityNDC);
+
+        float4 currentLD = LOAD_TEXTURE2D_LOD(
+            _ColorPyramidTexture,
+            int2(positionSS) - int2(currentVelocityNDC * _ScreenSize.xy),
+            0
+        );
+        color = color * (1.0 - temporalFilteringWeight) + currentLD * temporalFilteringWeight;
+    }
+
+    color.a = weight;
+
+#ifdef DEBUG_DISPLAY
+    if (_DebugLightingMode == DEBUGLIGHTINGMODE_SCREEN_SPACE_TRACING_REFLECTION)
+    {
+        bool applyDebug = true;
+        float4 debugColor = 0;
+        switch (_DebugLightingSubMode)
+        {
+            case DEBUGSCREENSPACETRACING_HIT_SUCCESS:
+                debugColor = float4(1, hitSuccessful ? 1 : 0, 0, 1);
+                break;
+            case DEBUGSCREENSPACETRACING_HI_ZHIT_WEIGHT:
+                debugColor = float4(hitWeight, hitWeight, hitWeight, 1);
+                break;
+            case DEBUGSCREENSPACETRACING_HI_ZPOSITION_NDC:
+                debugColor = float4(hitPositionNDC.x, hitPositionNDC.y, 0.5, 1);
+                break;
+            default:
+                applyDebug = false;
+                break;
+        }
+
+        if (applyDebug)
+            _DebugTexture[positionSS] = debugColor;
+    }
+#endif
+
+    _SSReflectionResolveNextTexture[positionSS] = color;
+}
 
 #endif
