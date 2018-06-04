@@ -214,7 +214,7 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
                     );
             m_BufferPyramid = new BufferPyramid(bufferPyramidProcessor);
             m_ScreenSpaceReflectionRenderer = new ScreenSpaceReflectionRenderer(
-                new ScreenSpaceReflectionRenderer.Settings { MaxRayAllocation = 2560 * 1440 },
+                new ScreenSpaceReflectionRenderer.Settings { MaxRayAllocation = 2560 * 1440, ResolutionMip = 2 }, // TODO: Expose this in HDRenderPipeline
                 RTHandles.DefaultInstance,
                 asset.renderPipelineResources.screenSpaceReflectionsCS
             );
@@ -970,7 +970,7 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
                     RenderDepthPyramid(hdCamera, cmd, renderContext, FullScreenDebugMode.DepthPyramid);
                     if (currentFrameSettings.enableSSR)
                     {
-                        m_ScreenSpaceReflectionRenderer.RenderPassCastRays(
+                        m_ScreenSpaceReflectionRenderer.RenderSSR(
                             hdCamera, 
                             cmd, 
                             m_CurrentDebugDisplaySettings.IsDebugDisplayEnabled(),

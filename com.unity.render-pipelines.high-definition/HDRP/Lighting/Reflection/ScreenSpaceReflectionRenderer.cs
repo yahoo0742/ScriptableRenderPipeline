@@ -10,7 +10,15 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
     {
         public struct Settings
         {
+            /// <summary>
+            /// Maximum number of ray allocation per rendering
+            /// </summary>
             public int MaxRayAllocation;
+
+            /// <summary>
+            /// Mip to use for raymarching and color resolve
+            /// </summary>
+            public int ResolutionMip;
         }
 
         struct CSMeta
@@ -104,6 +112,7 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
         ComputeShader m_CS;
         CSMeta m_Kernels;
         RTHandleSystem m_RTHSystem;
+        RTHandleSystem.RTHandle m_SSRColorResolveTexture;
         ComputeBuffer m_DispatchIndirectBuffer;
         ComputeBuffer m_PayloadBuffer;
         ComputeBuffer m_Payload1Buffer;
@@ -146,11 +155,19 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
                 Marshal.SizeOf(typeof(float)) * 4, 
                 ComputeBufferType.Default
             );
+            m_SSRColorResolveTexture = m_RTHSystem.Alloc(
+                new Vector2(1.0f / (1 << m_Settings.ResolutionMip), 1.0f / (1 << m_Settings.ResolutionMip)),
+                colorFormat: RenderTextureFormat.ARGBHalf,
+                enableRandomWrite: true,
+                autoGenerateMips: false,
+                useMipMap: false
+            );
         }
 
         public void ClearBuffers(CommandBuffer cmd, HDCamera hdCamera)
         {
             RenderPassClear(hdCamera, cmd);
+            HDUtils.SetRenderTarget(cmd, hdCamera, m_SSRColorResolveTexture, ClearFlag.Color, Color.clear);
         }
 
         public void ReleaseBuffers()
@@ -163,6 +180,7 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
             m_Payload1Buffer = null;
             m_Payload2Buffer.Release();
             m_Payload2Buffer = null;
+            m_RTHSystem.Release(m_SSRColorResolveTexture);
         }
 
         public void PushGlobalParams(HDCamera hdCamera, CommandBuffer cmd, FrameSettings frameSettings)
@@ -177,7 +195,7 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
             );
         }
 
-        public void RenderPassCastRays(
+        public void RenderSSR(
             HDCamera hdCamera, 
             CommandBuffer cmd, 
             bool debug,
@@ -190,7 +208,20 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
             var projectionModel     = (Lit.ProjectionModel)ssReflection.deferredProjectionModel.value;
 
             if (projectionModel == Lit.ProjectionModel.HiZ)
-                RenderPassAllocateRays(hdCamera, cmd);
+                RenderPassAllocateRays(hdCamera, cmd, ssReflection);
+
+            RenderPassCastRays(hdCamera, cmd, debug, debugTextureHandle, ssReflection);
+        }
+
+        void RenderPassCastRays(
+            HDCamera hdCamera, 
+            CommandBuffer cmd, 
+            bool debug,
+            RTHandleSystem.RTHandle debugTextureHandle,
+            ScreenSpaceReflection ssReflection
+        )
+        {
+            var projectionModel     = (Lit.ProjectionModel)ssReflection.deferredProjectionModel.value;
 
             var kernel              = m_Kernels.GetKCastRays(projectionModel, debug);
             var threadGroups        = new Vector3Int(
@@ -274,7 +305,8 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
 
         void RenderPassAllocateRays(
             HDCamera hdCamera, 
-            CommandBuffer cmd
+            CommandBuffer cmd,
+            ScreenSpaceReflection ssReflection
         )
         {
             var kernel              = m_Kernels.KAllocateRays;
