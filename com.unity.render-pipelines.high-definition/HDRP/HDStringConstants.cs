@@ -126,6 +126,7 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
         public static readonly int _DebugStep = Shader.PropertyToID("_DebugStep");
         public static readonly int _DebugFont = Shader.PropertyToID("_DebugFont");
         public static readonly int _DebugExposure = Shader.PropertyToID("_DebugExposure");
+        public static readonly int _DebugScreenSpaceTracingDataRead = Shader.PropertyToID("_DebugScreenSpaceTracingDataRead");
         public static readonly int _DebugScreenSpaceTracingData = Shader.PropertyToID("_DebugScreenSpaceTracingData");
         public static readonly int _ShowGrid = Shader.PropertyToID("_ShowGrid");
         public static readonly int _ShowSSRaySampledColor = Shader.PropertyToID("_ShowSSRaySampledColor");

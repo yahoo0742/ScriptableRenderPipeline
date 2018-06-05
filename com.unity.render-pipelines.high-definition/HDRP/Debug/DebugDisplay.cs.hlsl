@@ -36,7 +36,6 @@ struct ScreenSpaceTracingDebug
     uint iterationMipLevel;
     uint iteration;
     float iterationLinearDepthBufferMin;
-    float iterationLinearDepthBufferMax;
     float iterationLinearDepthBufferMinThickness;
     int iterationIntersectionKind;
     uint iterationCellSizeW;
@@ -51,7 +50,7 @@ struct ScreenSpaceTracingDebug
     float3 lightingSampledColor;
     float3 lightingSpecularFGD;
     float lightingWeight;
-    float2 padding;
+    float3 padding;
 };
 
 //
@@ -59,111 +58,107 @@ struct ScreenSpaceTracingDebug
 //
 int GetTracingModel(ScreenSpaceTracingDebug value)
 {
-    return value.tracingModel;
+	return value.tracingModel;
 }
 uint GetLoopStartPositionSSX(ScreenSpaceTracingDebug value)
 {
-    return value.loopStartPositionSSX;
+	return value.loopStartPositionSSX;
 }
 uint GetLoopStartPositionSSY(ScreenSpaceTracingDebug value)
 {
-    return value.loopStartPositionSSY;
+	return value.loopStartPositionSSY;
 }
 float GetLoopStartLinearDepth(ScreenSpaceTracingDebug value)
 {
-    return value.loopStartLinearDepth;
+	return value.loopStartLinearDepth;
 }
 float3 GetLoopRayDirectionSS(ScreenSpaceTracingDebug value)
 {
-    return value.loopRayDirectionSS;
+	return value.loopRayDirectionSS;
 }
 uint GetLoopMipLevelMax(ScreenSpaceTracingDebug value)
 {
-    return value.loopMipLevelMax;
+	return value.loopMipLevelMax;
 }
 uint GetLoopIterationMax(ScreenSpaceTracingDebug value)
 {
-    return value.loopIterationMax;
+	return value.loopIterationMax;
 }
 float3 GetIterationPositionSS(ScreenSpaceTracingDebug value)
 {
-    return value.iterationPositionSS;
+	return value.iterationPositionSS;
 }
 uint GetIterationMipLevel(ScreenSpaceTracingDebug value)
 {
-    return value.iterationMipLevel;
+	return value.iterationMipLevel;
 }
 uint GetIteration(ScreenSpaceTracingDebug value)
 {
-    return value.iteration;
+	return value.iteration;
 }
 float GetIterationLinearDepthBufferMin(ScreenSpaceTracingDebug value)
 {
-    return value.iterationLinearDepthBufferMin;
-}
-float GetIterationLinearDepthBufferMax(ScreenSpaceTracingDebug value)
-{
-    return value.iterationLinearDepthBufferMax;
+	return value.iterationLinearDepthBufferMin;
 }
 float GetIterationLinearDepthBufferMinThickness(ScreenSpaceTracingDebug value)
 {
-    return value.iterationLinearDepthBufferMinThickness;
+	return value.iterationLinearDepthBufferMinThickness;
 }
 int GetIterationIntersectionKind(ScreenSpaceTracingDebug value)
 {
-    return value.iterationIntersectionKind;
+	return value.iterationIntersectionKind;
 }
 uint GetIterationCellSizeW(ScreenSpaceTracingDebug value)
 {
-    return value.iterationCellSizeW;
+	return value.iterationCellSizeW;
 }
 uint GetIterationCellSizeH(ScreenSpaceTracingDebug value)
 {
-    return value.iterationCellSizeH;
+	return value.iterationCellSizeH;
 }
 int GetProxyShapeType(ScreenSpaceTracingDebug value)
 {
-    return value.proxyShapeType;
+	return value.proxyShapeType;
 }
 float GetProjectionDistance(ScreenSpaceTracingDebug value)
 {
-    return value.projectionDistance;
+	return value.projectionDistance;
 }
 int GetEndHitSuccess(ScreenSpaceTracingDebug value)
 {
-    return value.endHitSuccess;
+	return value.endHitSuccess;
 }
 float GetEndLinearDepth(ScreenSpaceTracingDebug value)
 {
-    return value.endLinearDepth;
+	return value.endLinearDepth;
 }
 uint GetEndPositionSSX(ScreenSpaceTracingDebug value)
 {
-    return value.endPositionSSX;
+	return value.endPositionSSX;
 }
 uint GetEndPositionSSY(ScreenSpaceTracingDebug value)
 {
-    return value.endPositionSSY;
+	return value.endPositionSSY;
 }
 float GetEndHitWeight(ScreenSpaceTracingDebug value)
 {
-    return value.endHitWeight;
+	return value.endHitWeight;
 }
 float3 GetLightingSampledColor(ScreenSpaceTracingDebug value)
 {
-    return value.lightingSampledColor;
+	return value.lightingSampledColor;
 }
 float3 GetLightingSpecularFGD(ScreenSpaceTracingDebug value)
 {
-    return value.lightingSpecularFGD;
+	return value.lightingSpecularFGD;
 }
 float GetLightingWeight(ScreenSpaceTracingDebug value)
 {
-    return value.lightingWeight;
+	return value.lightingWeight;
 }
-float2 GetPadding(ScreenSpaceTracingDebug value)
+float3 GetPadding(ScreenSpaceTracingDebug value)
 {
-    return value.padding;
+	return value.padding;
 }
 
 

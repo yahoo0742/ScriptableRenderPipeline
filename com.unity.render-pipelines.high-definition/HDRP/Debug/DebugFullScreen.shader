@@ -33,6 +33,8 @@ Shader "Hidden/HDRenderPipeline/DebugFullScreen"
             float _ShowSSRaySampledColor;
             CBUFFER_END
 
+            StructuredBuffer<ScreenSpaceTracingDebug> _DebugScreenSpaceTracingDataRead;
+
             TEXTURE2D(_DebugFullScreenTexture);
 
             struct Attributes
@@ -239,7 +241,7 @@ Shader "Hidden/HDRenderPipeline/DebugFullScreen"
                     else
                         color = LOAD_TEXTURE2D_LOD(_DebugFullScreenTexture, input.texcoord * _ScreenSize.xy, 0);
 
-                    ScreenSpaceTracingDebug debug = _DebugScreenSpaceTracingData[0];
+                    ScreenSpaceTracingDebug debug = _DebugScreenSpaceTracingDataRead[0];
 
                     // Fetch Depth Buffer and Position Inputs
                     const float2 deviceDepth = LOAD_TEXTURE2D_LOD(_DepthPyramidTexture, int2(input.positionCS.xy) >> debug.iterationMipLevel, debug.iterationMipLevel).rg;

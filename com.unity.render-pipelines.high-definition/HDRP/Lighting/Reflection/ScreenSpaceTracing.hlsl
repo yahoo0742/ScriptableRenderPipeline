@@ -409,7 +409,6 @@ bool ScreenSpaceLinearRaymarch(
     uint debugIteration = iteration;
     float debugIterationLinearDepthBufferMin = 0;
     float debugIterationLinearDepthBufferMinThickness = 0;
-    float debugIterationLinearDepthBufferMax = 0;
 #endif
 
     float invLinearDepth = 0.0;
@@ -510,7 +509,6 @@ bool ScreenSpaceLinearRaymarch(
         debug.iteration                                 = debugIteration;
         debug.iterationLinearDepthBufferMin             = debugIterationLinearDepthBufferMin;
         debug.iterationLinearDepthBufferMinThickness    = debugIterationLinearDepthBufferMinThickness;
-        debug.iterationLinearDepthBufferMax             = debugIterationLinearDepthBufferMax;
         debug.endHitSuccess                             = hitSuccessful;
         debug.endLinearDepth                            = hit.linearDepth;
         debug.endPositionSSX                            = hit.positionSS.x;
@@ -787,7 +785,6 @@ bool ScreenSpaceHiZRaymarchPrecomputed(
     uint debugIterationIntersectionKind = 0u;
     float debugIterationLinearDepthBufferMin = 0;
     float debugIterationLinearDepthBufferMinThickness = 0;
-    float debugIterationLinearDepthBufferMax = 0;
 #endif
 
     iteration                           = 0u;
@@ -991,7 +988,6 @@ bool ScreenSpaceHiZRaymarchPrecomputed(
         debug.iteration                                 = debugIteration;
         debug.iterationLinearDepthBufferMin             = debugIterationLinearDepthBufferMin;
         debug.iterationLinearDepthBufferMinThickness    = debugIterationLinearDepthBufferMinThickness;
-        debug.iterationLinearDepthBufferMax             = debugIterationLinearDepthBufferMax;
         debug.iterationIntersectionKind                 = debugIterationIntersectionKind;
         debug.iterationCellSizeW                        = debugIterationCellSize.x;
         debug.iterationCellSizeH                        = debugIterationCellSize.y;

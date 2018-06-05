@@ -1886,7 +1886,7 @@ IndirectLighting EvaluateBSDF_SSLighting(LightLoopContext lightLoopContext,
                 0.0
             );
 
-            float2 hitVelocityNDC;
+            float2 hitVelocityNDC = float2(0, 0);
             DecodeVelocity(hitVelocityBuffer, hitVelocityNDC);
 
             float3 preLD = SAMPLE_TEXTURE2D_LOD(
