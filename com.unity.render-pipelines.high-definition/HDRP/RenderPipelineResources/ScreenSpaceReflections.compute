@@ -282,7 +282,7 @@ void KNAME(
     uint4 payload = asuint(LOAD_TEXTURE2D_LOD(_SSReflectionRayHitTexture, positionTXS, 0));
     DecodeRayHit(payload, hitPositionSS, hitPositionNDC, hitWeight, hitSuccessful, perceptualRoughness);
 
-    int mipLevel                = PositivePow(perceptualRoughness, 0.8) * uint(max(_ColorPyramidScale.z - 1, 0));
+    int mipLevel                = PlanarPerceptualRoughnessToMipmapLevel(perceptualRoughness, _ColorPyramidScale.z);
 
     float weight = CalculateFullWeight(hitPositionNDC, _SSReflectionInvScreenWeightDistance, hitWeight, hitSuccessful);
 

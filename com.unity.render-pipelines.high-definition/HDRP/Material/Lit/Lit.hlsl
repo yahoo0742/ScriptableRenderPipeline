@@ -1883,7 +1883,7 @@ IndirectLighting EvaluateBSDF_SSLighting(LightLoopContext lightLoopContext,
                 s_trilinear_clamp_sampler,
                 // Offset by half a texel to properly interpolate between this pixel and its mips
                 (hit.positionNDC - hitVelocityNDC) * _ColorPyramidScale.xy + _ColorPyramidSize.zw * 0.5,
-                PositivePow(bsdfData.perceptualRoughness, 0.8) * uint(max(_ColorPyramidScale.z - 1, 0))
+                PlanarPerceptualRoughnessToMipmapLevel(bsdfData.perceptualRoughness, _ColorPyramidScale.z)
             ).rgb;
 
             // We use specularFGD as an approximation of the fresnel effect (that also handle smoothness)
