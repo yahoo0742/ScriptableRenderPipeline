@@ -1023,7 +1023,7 @@ PreLightData GetPreLightData(float3 V, PositionInputs posInput, inout BSDFData b
     preLightData.transparentTransmittance = exp(-bsdfData.absorptionCoefficient * refraction.dist);
     // Empirical remap to try to match a bit the refraction probe blurring for the fallback
     // Use IblPerceptualRoughness so we can handle approx of clear coat.
-    preLightData.transparentSSMipLevel = pow(preLightData.iblPerceptualRoughness, 1.3) * uint(max(_ColorPyramidScale.z - 1, 0));
+    preLightData.transparentSSMipLevel = PositivePow(preLightData.iblPerceptualRoughness, 1.3) * uint(max(_ColorPyramidScale.z - 1, 0));
 #endif
 
     return preLightData;
@@ -1757,12 +1757,14 @@ IndirectLighting EvaluateBSDF_SSLighting(LightLoopContext lightLoopContext,
         // Raytracing parameters
         float3 rayOriginWS              = preLightData.transparentPositionWS;
         float3 rayDirWS                 = preLightData.transparentRefractV;
-        int mipLevel                    = preLightData.transparentSSMipLevel;
+        float mipLevel                  = preLightData.transparentSSMipLevel;
 #if DEBUG_DISPLAY
         bool debug                      = _DebugLightingMode == DEBUGLIGHTINGMODE_SCREEN_SPACE_TRACING_REFRACTION
                                         && !any(int2(_MouseClickPixelCoord.xy) - int2(posInput.positionSS));
 #endif
         float hitWeight                 = 0;
+        bool hitSuccessful              = false;
+        float weight                    = 0;
 
         // Screen space tracing query
         ScreenSpaceRayHit hit;
@@ -1777,7 +1779,8 @@ IndirectLighting EvaluateBSDF_SSLighting(LightLoopContext lightLoopContext,
             , debug
 #endif
         );
-        hitSuccessful = ScreenSpaceHiZRaymarchRefraction(ssRayInput, hit, hitWeight);
+        hitSuccessful   = ScreenSpaceHiZRaymarchRefraction(ssRayInput, hit, hitWeight);
+        weight          = CalculateFullWeight(hit.positionNDC, _SSRefractionInvScreenWeightDistance, hitWeight, hitSuccessful);
 
 #elif defined(_REFRACTION_SSRAY_PROXY)
         ScreenSpaceProxyRaycastInput ssRayInput = CreateScreenSpaceProxyRaycastInput(
@@ -1788,11 +1791,30 @@ IndirectLighting EvaluateBSDF_SSLighting(LightLoopContext lightLoopContext,
             , debug
 #endif
         );
-        hitSuccessful = ScreenSpaceProxyRaycastRefraction(ssRayInput, hit);
+        hitSuccessful   = ScreenSpaceProxyRaycastRefraction(ssRayInput, hit);
+        weight          = 1;
 #endif
 
-        // Get hit weighting
-        float weight = CalculateFullWeight(hitPositionNDC, _SSRefractionInvScreenWeightDistance, hitWeight, hitSuccessful);
+#if DEBUG_DISPLAY
+        if (_DebugLightingMode == DEBUGLIGHTINGMODE_SCREEN_SPACE_TRACING_REFRACTION)
+        {
+            switch (_DebugLightingSubMode)
+            {
+                case DEBUGSCREENSPACETRACING_COLOR:
+                    break;
+                case DEBUGSCREENSPACETRACING_WEIGHT:
+                    lighting.specularTransmitted = lerp(GetIndexColor(1), GetIndexColor(2), weight);
+                    weight = 1;
+                    UpdateLightingHierarchyWeights(hierarchyWeight, weight);
+                    return lighting;
+                default:
+                    lighting.specularTransmitted = hit.debugOutput;
+                    weight = 1;
+                    UpdateLightingHierarchyWeights(hierarchyWeight, weight);
+                    return lighting;
+            }
+        }
+#endif
         
         if (weight == 0)
             return lighting;
@@ -1804,7 +1826,7 @@ IndirectLighting EvaluateBSDF_SSLighting(LightLoopContext lightLoopContext,
             _ColorPyramidTexture,
             s_trilinear_clamp_sampler,
             // Offset by half a texel to properly interpolate between this pixel and its mips
-            hitPositionNDC * _ColorPyramidScale.xy + _ColorPyramidSize.zw * 0.5,
+            hit.positionNDC * _ColorPyramidScale.xy + _ColorPyramidSize.zw * 0.5,
             mipLevel
         ).rgb;
 
@@ -1833,12 +1855,21 @@ IndirectLighting EvaluateBSDF_SSLighting(LightLoopContext lightLoopContext,
             UpdateLightingHierarchyWeights(hierarchyWeight, weight);
 
 #if DEBUG_DISPLAY
-            if (_DebugLightingMode == DEBUGLIGHTINGMODE_SCREEN_SPACE_TRACING_REFLECTION
-                && _DebugLightingSubMode == DEBUGSCREENSPACETRACING_SPECULAR_COLOR)
+            if (_DebugLightingMode == DEBUGLIGHTINGMODE_SCREEN_SPACE_TRACING_REFLECTION)
             {
-                lighting.specularReflected = color.rgb;
-                weight = 1;
-                UpdateLightingHierarchyWeights(hierarchyWeight, weight);
+                switch (_DebugLightingSubMode)
+                {
+                    case DEBUGSCREENSPACETRACING_SPECULAR_COLOR:
+                        lighting.specularReflected = color.rgb;
+                        weight = 1;
+                        UpdateLightingHierarchyWeights(hierarchyWeight, weight);
+                        break;
+                    case DEBUGSCREENSPACETRACING_WEIGHT:
+                        lighting.specularReflected = weight;
+                        weight = 1;
+                        UpdateLightingHierarchyWeights(hierarchyWeight, weight);
+                        break;
+                }
             }
 #endif
 
@@ -1902,11 +1933,20 @@ IndirectLighting EvaluateBSDF_SSLighting(LightLoopContext lightLoopContext,
             lighting.specularReflected = F * preLD.rgb * weight;
 
 #if DEBUG_DISPLAY
-            if (_DebugLightingMode == DEBUGLIGHTINGMODE_SCREEN_SPACE_TRACING_REFLECTION
-                && _DebugLightingSubMode == DEBUGSCREENSPACETRACING_SPECULAR_COLOR)
+            if (_DebugLightingMode == DEBUGLIGHTINGMODE_SCREEN_SPACE_TRACING_REFLECTION)
             {
-                weight = 1;
-                UpdateLightingHierarchyWeights(hierarchyWeight, weight);
+                switch (_DebugLightingSubMode)
+                {
+                    case DEBUGSCREENSPACETRACING_SPECULAR_COLOR:
+                        weight = 1;
+                        UpdateLightingHierarchyWeights(hierarchyWeight, weight);;
+                        break;
+                    case DEBUGSCREENSPACETRACING_WEIGHT:
+                        lighting.specularReflected = weight;
+                        weight = 1;
+                        UpdateLightingHierarchyWeights(hierarchyWeight, weight);
+                        break;
+                }
             }
 #endif
 
@@ -2114,10 +2154,15 @@ void PostEvaluateBSDF(  LightLoopContext lightLoopContext,
             break;
 
         case DEBUGLIGHTINGMODE_SCREEN_SPACE_TRACING_REFRACTION:
-            if (_DebugLightingSubMode != DEBUGSCREENSPACETRACING_COLOR)
-                diffuseLighting = lighting.indirect.specularTransmitted;
-            else
-                specularLighting = previousSpecularLighting;
+            switch (_DebugLightingSubMode)
+            {
+                case DEBUGSCREENSPACETRACING_COLOR:
+                    specularLighting = previousSpecularLighting;
+                    break;
+                default:
+                    diffuseLighting = lighting.indirect.specularTransmitted;
+                    break;
+            }
             break;
 
         case DEBUGLIGHTINGMODE_SCREEN_SPACE_TRACING_REFLECTION:

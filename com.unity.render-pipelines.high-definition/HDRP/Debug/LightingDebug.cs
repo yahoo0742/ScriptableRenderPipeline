@@ -25,6 +25,7 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
         HitSuccess,
         TracingModel,
         SpecularColor,
+        Weight,
         HiZIterationCount,
         HiZIntersectionKind,
         HiZHitWeight,

@@ -190,10 +190,11 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
             debugScreenSpaceTracingProxyValues = debugScreenSpaceTracingProxyValueList.ToArray();
             debugScreenSpaceTracingLinearStrings = debugScreenSpaceTracingLinearStringsList.ToArray();
             debugScreenSpaceTracingLinearValues = debugScreenSpaceTracingLinearValueList.ToArray();
-            debuggedAlgorithmStrings = Enum.GetNames(typeof(Lit.ProjectionModel))
-                .Select(t => new GUIContent(t))
-                .ToArray();
-            debuggedAlgorithmValues = (int[])Enum.GetValues(typeof(Lit.ProjectionModel));
+            var litProjectionModels = Enum.GetNames(typeof(Lit.ProjectionModel))
+                .Select((t, i) => new { c = new GUIContent(t), v = i })
+                .Where(n => n.c.text != "None" && n.c.text != "Count");
+            debuggedAlgorithmStrings = litProjectionModels.Select(c => c.c).ToArray();
+            debuggedAlgorithmValues = litProjectionModels.Select(c => c.v).ToArray();
         }
 
         public int GetDebugMaterialIndex()
@@ -322,6 +323,7 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
             {
                 lightingDebugSettings.debugLightingMode = DebugLightingMode.ScreenSpaceTracingRefraction;
                 fullScreenDebugMode = FullScreenDebugMode.ScreenSpaceTracing;
+                lightingDebugSettings.debugScreenSpaceTracingMode = DebugScreenSpaceTracing.Color;
             }
             else
             {
@@ -342,6 +344,7 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
             {
                 lightingDebugSettings.debugLightingMode = DebugLightingMode.ScreenSpaceTracingReflection;
                 fullScreenDebugMode = FullScreenDebugMode.ScreenSpaceTracing;
+                lightingDebugSettings.debugScreenSpaceTracingMode = DebugScreenSpaceTracing.Color;
             }
             else
             {
