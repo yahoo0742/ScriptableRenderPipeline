@@ -11,12 +11,8 @@ using UnityEditor.Graphing;
 using Debug = UnityEngine.Debug;
 using Object = UnityEngine.Object;
 using Edge = UnityEditor.Experimental.UIElements.GraphView.Edge;
-#if UNITY_2018_1
-using GeometryChangedEvent = UnityEngine.Experimental.UIElements.PostLayoutEvent;
-#else
 using UnityEditor.Experimental.UIElements.GraphView;
-using GeometryChangedEvent = UnityEngine.Experimental.UIElements.GeometryChangedEvent;
-#endif
+using UnityEngine.Experimental.UIElements;
 
 namespace UnityEditor.ShaderGraph.Drawing
 {
@@ -150,33 +146,6 @@ namespace UnityEditor.ShaderGraph.Drawing
             }
 
             graphEditorView = null;
-        }
-
-        void UpdateDependantGraphs()
-        {
-            string[] lookFor = new string[] {"Assets"};
-            var guids = AssetDatabase.FindAssets("t:shader", lookFor);
-            foreach (string guid in guids)
-            {
-                if (AssetDatabase.GUIDToAssetPath(guid).ToLower().EndsWith(ShaderGraphImporter.ShaderGraphExtension))
-                {
-                    var path = AssetDatabase.GUIDToAssetPath(guid);
-
-                    var textGraph = File.ReadAllText(path, Encoding.UTF8);
-                    var graph = JsonUtility.FromJson<MaterialGraph>(textGraph);
-                    graph.LoadedFromDisk();
-
-                    foreach (SubGraphNode graphNode in graph.GetNodes<SubGraphNode>())
-                    {
-                        var subpath = AssetDatabase.GetAssetPath(graphNode.subGraphAsset);
-                        var subguid = AssetDatabase.AssetPathToGUID(subpath);
-                        if (subguid == selectedGuid)
-                        {
-                            UpdateShaderGraphOnDisk(path, graph);
-                        }
-                    }
-                }
-            }
         }
 
         public void PingAsset()
@@ -434,8 +403,6 @@ namespace UnityEditor.ShaderGraph.Drawing
 
             File.WriteAllText(path, EditorJsonUtility.ToJson(graph, true));
             AssetDatabase.ImportAsset(path);
-
-            UpdateDependantGraphs();
         }
 
         void UpdateShaderGraphOnDisk(string path)

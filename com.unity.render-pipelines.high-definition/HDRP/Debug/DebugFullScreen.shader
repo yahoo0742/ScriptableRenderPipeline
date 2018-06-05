@@ -24,6 +24,7 @@ Shader "Hidden/HDRenderPipeline/DebugFullScreen"
             #include "../ShaderVariables.hlsl"
             #include "../Debug/DebugDisplay.hlsl"
             #include "../Debug/DebugDisplay.cs.hlsl"
+            #include "../Material/Builtin/BuiltinData.hlsl"
 
             CBUFFER_START (UnityDebug)
             float _FullScreenDebugMode;
@@ -118,9 +119,13 @@ Shader "Hidden/HDRenderPipeline/DebugFullScreen"
                 return d;
             }
 
+            // return motion vector in NDC space [0..1]
             float2 SampleMotionVectors(float2 coords)
             {
-                return SAMPLE_TEXTURE2D(_DebugFullScreenTexture, s_point_clamp_sampler, coords).xy;
+                float2 velocityNDC;
+                DecodeVelocity(SAMPLE_TEXTURE2D(_DebugFullScreenTexture, s_point_clamp_sampler, coords), velocityNDC);
+
+                return velocityNDC;
             }
             // end motion vector utilties
 

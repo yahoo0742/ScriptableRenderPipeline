@@ -11,9 +11,6 @@ using UnityEngine.Experimental.UIElements.StyleSheets;
 using UnityEngine.Rendering;
 using Edge = UnityEditor.Experimental.UIElements.GraphView.Edge;
 using Object = UnityEngine.Object;
-#if UNITY_2018_1
-using GeometryChangedEvent = UnityEngine.Experimental.UIElements.PostLayoutEvent;
-#endif
 
 namespace UnityEditor.ShaderGraph.Drawing
 {
@@ -29,8 +26,6 @@ namespace UnityEditor.ShaderGraph.Drawing
     {
         MaterialGraphView m_GraphView;
         MasterPreviewView m_MasterPreviewView;
-
-        private EditorWindow m_EditorWindow;
 
         AbstractMaterialGraph m_Graph;
         PreviewManager m_PreviewManager;
@@ -66,7 +61,6 @@ namespace UnityEditor.ShaderGraph.Drawing
         {
             m_Graph = graph;
             AddStyleSheetPath("Styles/GraphEditorView");
-            m_EditorWindow = editorWindow;
             previewManager = new PreviewManager(graph);
 
             string serializedWindowLayout = EditorUserSettings.GetConfigValue(k_FloatingWindowsLayoutKey);
@@ -93,6 +87,8 @@ namespace UnityEditor.ShaderGraph.Drawing
                         if (showInProjectRequested != null)
                             showInProjectRequested();
                     }
+                    GUILayout.FlexibleSpace();
+                    GUILayout.EndHorizontal();
                 });
             Add(toolbar);
 
@@ -152,18 +148,7 @@ namespace UnityEditor.ShaderGraph.Drawing
 
         void OnSpaceDown(KeyDownEvent evt)
         {
-            if (evt.keyCode == KeyCode.Space && !evt.shiftKey && !evt.altKey && !evt.ctrlKey && !evt.commandKey)
-            {
-                if (graphView.nodeCreationRequest == null)
-                    return;
-
-                Vector2 referencePosition;
-                referencePosition = evt.imguiEvent.mousePosition;
-                Vector2 screenPoint = m_EditorWindow.position.position + referencePosition;
-
-                graphView.nodeCreationRequest(new NodeCreationContext() { screenMousePosition = screenPoint });
-            }
-            else if (evt.keyCode == KeyCode.F1)
+            if (evt.keyCode == KeyCode.F1)
             {
                 if (m_GraphView.selection.OfType<MaterialNodeView>().Count() == 1)
                 {
