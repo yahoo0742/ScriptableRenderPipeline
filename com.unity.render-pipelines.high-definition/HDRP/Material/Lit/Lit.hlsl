@@ -1838,7 +1838,7 @@ IndirectLighting EvaluateBSDF_SSLighting(LightLoopContext lightLoopContext,
     }
 #endif
 
-    if (GPUImageBasedLightingType == GPUIMAGEBASEDLIGHTINGTYPE_REFLECTION)
+    if (GPUImageBasedLightingType == GPUIMAGEBASEDLIGHTINGTYPE_REFLECTION && _SSReflectionEnabled == 1)
     {
         if (_SSReflectionProjectionModel == PROJECTIONMODEL_HI_Z)
         {
