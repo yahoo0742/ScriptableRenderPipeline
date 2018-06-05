@@ -284,12 +284,7 @@ void KNAME(
 
     int mipLevel                = PositivePow(perceptualRoughness, 0.8) * uint(max(_ColorPyramidScale.z - 1, 0));
 
-    // Fade pixels near the texture buffers' borders
-    float2  weightNDC = clamp(min(hitPositionNDC, 1 - hitPositionNDC) * _SSReflectionInvScreenWeightDistance, 0, 1);
-            weightNDC = weightNDC * weightNDC * (3 - 2 * weightNDC);
-    // TODO: Fade pixels with normal non facing the ray direction
-    // TODO: Fade pixels marked as foreground in stencil
-    float weight = weightNDC.x * weightNDC.y * hitWeight * hitSuccessful;
+    float weight = CalculateFullWeight(hitPositionNDC, _SSReflectionInvScreenWeightDistance, hitWeight, hitSuccessful);
 
     if (weight == 0)
     {

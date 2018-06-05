@@ -259,6 +259,7 @@ float3 IntersectCellPlanes(
     return testHitPositionSS;
 }
 
+// Weighting functions
 float CalculateHitWeight(
     ScreenSpaceRayHit hit,
     float2 startPositionSS,
@@ -272,6 +273,28 @@ float CalculateHitWeight(
     float screenDistanceWeight = min(screenDistanceWeights.x, screenDistanceWeights.y);
 
     return screenDistanceWeight;
+}
+
+float CalculateDistanceToScreenWeight(float2 positionNDC, float invScreenWeightDistance)
+{
+    float2  weightNDC = clamp(min(positionNDC, 1 - positionNDC) * invScreenWeightDistance, 0, 1);
+            weightNDC = weightNDC * weightNDC * (3 - 2 * weightNDC);
+    return weightNDC.x * weightNDC.y;
+}
+
+float AggregateWeights(float hitWeight, float screenWeight)
+{
+    return hitWeight * screenWeight;
+}
+
+float CalculateFullWeight(float2 hitPositionNDC, float invScreenWeightDistance, float hitWeight, bool hitSuccesss)
+{
+    float2  weightNDC = clamp(min(hitPositionNDC, 1 - hitPositionNDC) * invScreenWeightDistance, 0, 1);
+            weightNDC = weightNDC * weightNDC * (3 - 2 * weightNDC);
+    // TODO: Fade pixels with normal non facing the ray direction
+    // TODO: Fade pixels marked as foreground in stencil
+    float weight = weightNDC.x * weightNDC.y * hitWeight * hitSuccesss;
+    return weight;
 }
 
 #ifdef DEBUG_DISPLAY
