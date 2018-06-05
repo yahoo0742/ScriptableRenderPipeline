@@ -1759,7 +1759,7 @@ IndirectLighting EvaluateBSDF_SSLighting(LightLoopContext lightLoopContext,
         float3 rayDirWS                 = preLightData.transparentRefractV;
         int mipLevel                    = preLightData.transparentSSMipLevel;
 #if DEBUG_DISPLAY
-        bool debug                      = _DebugLightingMode == GPUIMAGEBASEDLIGHTINGTYPE_REFRACTION
+        bool debug                      = _DebugLightingMode == DEBUGLIGHTINGMODE_SCREEN_SPACE_TRACING_REFRACTION
                                         && !any(int2(_MouseClickPixelCoord.xy) - int2(posInput.positionSS));
 #endif
         float hitWeight                 = 0;
@@ -1831,6 +1831,17 @@ IndirectLighting EvaluateBSDF_SSLighting(LightLoopContext lightLoopContext,
 
             lighting.specularReflected = F * color.rgb * weight;
             UpdateLightingHierarchyWeights(hierarchyWeight, weight);
+
+#if DEBUG_DISPLAY
+            if (_DebugLightingMode == DEBUGLIGHTINGMODE_SCREEN_SPACE_TRACING_REFLECTION
+                && _DebugLightingSubMode == DEBUGSCREENSPACETRACING_SPECULAR_COLOR)
+            {
+                lighting.specularReflected = color.rgb;
+                weight = 1;
+                UpdateLightingHierarchyWeights(hierarchyWeight, weight);
+            }
+#endif
+
             return lighting;
         }
         else if (_SSReflectionProjectionModel == PROJECTIONMODEL_PROXY)
@@ -1889,6 +1900,16 @@ IndirectLighting EvaluateBSDF_SSLighting(LightLoopContext lightLoopContext,
             // We use specularFGD as an approximation of the fresnel effect (that also handle smoothness)
             float3 F = preLightData.specularFGD;
             lighting.specularReflected = F * preLD.rgb * weight;
+
+#if DEBUG_DISPLAY
+            if (_DebugLightingMode == DEBUGLIGHTINGMODE_SCREEN_SPACE_TRACING_REFLECTION
+                && _DebugLightingSubMode == DEBUGSCREENSPACETRACING_SPECULAR_COLOR)
+            {
+                weight = 1;
+                UpdateLightingHierarchyWeights(hierarchyWeight, weight);
+            }
+#endif
+
             return lighting;
         }
     }
@@ -2075,7 +2096,8 @@ void PostEvaluateBSDF(  LightLoopContext lightLoopContext,
 
     if (_DebugLightingMode != 0)
     {
-        bool keepSpecular = false;
+        float3 previousSpecularLighting = specularLighting;
+        specularLighting = float3(0.0, 0.0, 0.0); // Disable specular lighting
 
         switch (_DebugLightingMode)
         {
@@ -2095,19 +2117,21 @@ void PostEvaluateBSDF(  LightLoopContext lightLoopContext,
             if (_DebugLightingSubMode != DEBUGSCREENSPACETRACING_COLOR)
                 diffuseLighting = lighting.indirect.specularTransmitted;
             else
-                keepSpecular = true;
+                specularLighting = previousSpecularLighting;
             break;
 
         case DEBUGLIGHTINGMODE_SCREEN_SPACE_TRACING_REFLECTION:
-            if (_DebugLightingSubMode != DEBUGSCREENSPACETRACING_COLOR)
-                diffuseLighting = lighting.indirect.specularReflected;
-            else
-                keepSpecular = true;
+            switch (_DebugLightingSubMode)
+            {
+                case DEBUGSCREENSPACETRACING_COLOR:
+                    specularLighting = previousSpecularLighting;
+                    break;
+                default:
+                    diffuseLighting = lighting.indirect.specularReflected;
+                    break;
+            }
             break;
         }
-
-        if (!keepSpecular)
-            specularLighting = float3(0.0, 0.0, 0.0); // Disable specular lighting
     }
     else if (_DebugMipMapMode != DEBUGMIPMAPMODE_NONE)
     {

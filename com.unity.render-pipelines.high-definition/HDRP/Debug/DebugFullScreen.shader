@@ -234,7 +234,7 @@ Shader "Hidden/HDRenderPipeline/DebugFullScreen"
                     const float circleRadius = 3.5;
                     const float ringSize = 1.5;
                     float4 color = float4(0, 0, 0, 0);
-                    if (_DebugLightingSubMode == DEBUGSCREENSPACETRACING_COLOR)
+                    if (_DebugLightingSubMode == DEBUGSCREENSPACETRACING_COLOR || _DebugLightingSubMode == DEBUGSCREENSPACETRACING_SPECULAR_COLOR)
                         color = LOAD_TEXTURE2D_LOD(_ColorPyramidTexture, input.texcoord * _ScreenSize.xy, 0);
                     else
                         color = LOAD_TEXTURE2D_LOD(_DebugFullScreenTexture, input.texcoord * _ScreenSize.xy, 0);

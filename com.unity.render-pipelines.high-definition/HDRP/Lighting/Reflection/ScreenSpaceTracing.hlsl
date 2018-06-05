@@ -311,9 +311,6 @@ void DebugComputeCommonOutput(
 {
     switch (_DebugLightingSubMode)
     {
-    case DEBUGSCREENSPACETRACING_RAY_DIR_WS:
-        hit.debugOutput =  rayDirWS * 0.5 + 0.5;
-        break;
     case DEBUGSCREENSPACETRACING_HIT_DEPTH:
         hit.debugOutput =  frac(hit.linearDepth * 0.1);
         break;
@@ -485,14 +482,8 @@ bool ScreenSpaceLinearRaymarch(
     DebugComputeCommonOutput(input.rayDirWS, hitSuccessful, PROJECTIONMODEL_LINEAR, hit);
     switch (_DebugLightingSubMode)
     {
-    case DEBUGSCREENSPACETRACING_LINEAR_POSITION_NDC:
-        hit.debugOutput =  float3(float2(startPositionSS.xy) * _ScreenSize.zw, 0);
-        break;
     case DEBUGSCREENSPACETRACING_LINEAR_ITERATION_COUNT:
         hit.debugOutput =  float(iteration) / float(settingsRayMaxIterations);
-        break;
-    case DEBUGSCREENSPACETRACING_LINEAR_RAY_DIR_NDC:
-        hit.debugOutput =  float3(raySS.xy * 0.5 + 0.5, frac(0.1 / raySS.z));
         break;
     case DEBUGSCREENSPACETRACING_LINEAR_HIT_WEIGHT:
         hit.debugOutput =  float3(hitWeight, hitWeight, hitWeight);
@@ -968,17 +959,8 @@ bool ScreenSpaceHiZRaymarchPrecomputed(
     DebugComputeCommonOutput(float3(0, 0, 0), hitSuccessful, PROJECTIONMODEL_HI_Z, hit);
     switch (_DebugLightingSubMode)
     {
-    case DEBUGSCREENSPACETRACING_HI_ZPOSITION_NDC:
-        hit.debugOutput =  float3(float2(startPositionSS.xy) * _ScreenSize.zw, 0);
-        break;
     case DEBUGSCREENSPACETRACING_HI_ZITERATION_COUNT:
         hit.debugOutput =  float(iteration) / float(settingsRayMaxIterations);
-        break;
-    case DEBUGSCREENSPACETRACING_HI_ZRAY_DIR_NDC:
-        hit.debugOutput =  float3(raySS.xy * 0.5 + 0.5, frac(0.1 / raySS.z));
-        break;
-    case DEBUGSCREENSPACETRACING_HI_ZMAX_USED_MIP_LEVEL:
-        hit.debugOutput =  float(debugLoopMipMaxUsedLevel) / float(maxMipLevel);
         break;
     case DEBUGSCREENSPACETRACING_HI_ZINTERSECTION_KIND:
         hit.debugOutput =  GetIndexColor(intersectionKind);
