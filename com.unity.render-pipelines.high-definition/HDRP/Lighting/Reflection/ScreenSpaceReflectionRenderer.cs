@@ -42,6 +42,7 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
             public int                  KClear;
             public Vector3Int           KAllocateRays_NumThreads;
             public int                  KAllocateRays;
+            public int                  KAllocateRays_Debug;
             Vector3Int                  m_KCastRays_NumThreads;
             int                         m_KCastRays;
             Vector3Int                  m_KCastRaysDebug_NumThreads;
@@ -71,6 +72,7 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
             {
                 FindKernel(cs, "KClear", out KClear, ref KClear_NumThreads);
                 FindKernel(cs, "KAllocateRays_HiZ", out KAllocateRays, ref KAllocateRays_NumThreads);
+                FindKernel(cs, "KAllocateRays_Debug_HiZ", out KAllocateRays_Debug, ref KAllocateRays_NumThreads);
                 FindKernel(cs, "KCastRays_HiZ", out m_KCastRays, ref m_KCastRays_NumThreads);
                 FindKernel(cs, "KCastRays_Debug_HiZ", out m_KCastRaysDebug, ref m_KCastRaysDebug_NumThreads);
                 FindKernel(cs, "KResolve", out KResolve, ref KResolve_NumThreads);
@@ -184,7 +186,7 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
             var projectionModel     = (Lit.ProjectionModel)ssReflection.deferredProjectionModel.value;
 
             if (projectionModel == Lit.ProjectionModel.HiZ)
-                RenderPassAllocateRays(hdCamera, cmd, ssReflection);
+                RenderPassAllocateRays(hdCamera, cmd, debug, debugTextureHandle, ssReflection);
 
             RenderPassCastRays(hdCamera, cmd, debug, debugTextureHandle, ssReflection);
             RenderPassResolve(hdCamera, cmd, debug, debugTextureHandle, ssReflection);
@@ -219,10 +221,12 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
         void RenderPassAllocateRays(
             HDCamera hdCamera, 
             CommandBuffer cmd,
+            bool debug,
+            RTHandleSystem.RTHandle debugTextureHandle,
             ScreenSpaceReflection ssReflection
         )
         {
-            var kernel              = m_Kernels.KAllocateRays;
+            var kernel              = debug ? m_Kernels.KAllocateRays_Debug : m_Kernels.KAllocateRays;
             var threadGroups        = new Vector3Int(
                                         Mathf.CeilToInt((hdCamera.actualWidth >> m_Settings.ResolutionMip) / (float)CSMeta.KAllocateRay_KernelSize),
                                         Mathf.CeilToInt((hdCamera.actualHeight >> m_Settings.ResolutionMip) / (float)CSMeta.KAllocateRay_KernelSize),
@@ -231,6 +235,9 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
 
             using (new ProfilingSample(cmd, "Screen Space Reflection - Allocate Rays", CustomSamplerId.SSRAllocateRays.GetSampler()))
             {
+                if (debug)
+                    cmd.SetComputeTextureParam(m_CS, kernel, HDShaderIDs._DebugTexture, debugTextureHandle);
+
                 cmd.SetComputeBufferParam(
                     m_CS,
                     kernel,

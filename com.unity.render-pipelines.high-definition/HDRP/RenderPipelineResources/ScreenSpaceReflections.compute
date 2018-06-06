@@ -38,6 +38,7 @@
 // -------------------------------------------------
 #pragma kernel KClear                       KNAME=KClear                    PASS=PASS_CLEAR
 #pragma kernel KAllocateRays_HiZ            KNAME=KAllocateRays_HiZ         PASS=PASS_ALLOCATE_RAYS
+#pragma kernel KAllocateRays_Debug_HiZ      KNAME=KAllocateRays_Debug_HiZ   PASS=PASS_ALLOCATE_RAYS     DEBUG_DISPLAY
 #pragma kernel KCastRays_HiZ                KNAME=KCastRays_HiZ             PASS=PASS_CAST_RAYS
 #pragma kernel KCastRays_Debug_HiZ          KNAME=KCastRays_Debug_HiZ       PASS=PASS_CAST_RAYS         DEBUG_DISPLAY
 #pragma kernel KResolve                     KNAME=KResolve                  PASS=PASS_RESOLVE
@@ -93,11 +94,18 @@ uint GetIndex(uint2 groupId, uint groupThreadId)
 
 void DecodeSSRBuffer(uint2 positionSS, out float3 normalWS, out float perceptualRoughness)
 {
-    BSDFData bsdfData;
-    BakeLightingData bakeLightingData;
-    DECODE_FROM_GBUFFER(positionSS, 0, bsdfData, bakeLightingData.bakeDiffuseLighting);
-    normalWS            = bsdfData.normalWS;
-    perceptualRoughness = bsdfData.perceptualRoughness;
+    GBufferType1 inGBuffer1 = LOAD_TEXTURE2D(_GBufferTexture1, positionSS);
+    float3 packNormalWS = inGBuffer1.rgb;
+    float2 octNormalWS = Unpack888ToFloat2(packNormalWS);
+    normalWS = UnpackNormalOctQuadEncode(octNormalWS * 2.0 - 1.0);
+    perceptualRoughness = inGBuffer1.a;
+
+    // BSDFData bsdfData;
+    // BakeLightingData bakeLightingData;
+
+    // DECODE_FROM_GBUFFER(positionSS, 0, bsdfData, bakeLightingData.bakeDiffuseLighting);
+    // normalWS            = bsdfData.normalWS;
+    // perceptualRoughness = bsdfData.perceptualRoughness;
 }
 
 // #################################################
@@ -134,6 +142,10 @@ RWBuffer<uint>                  _Payload;  // Indirect argument must be in Buffe
 RWStructuredBuffer<float4>      _Payload1; // Must use a StructuredBuffer here otherwise, swizzlign is incorrect for PS4
 RWStructuredBuffer<float4>      _Payload2; // Must use a StructuredBuffer here otherwise, swizzlign is incorrect for PS4
 
+#ifdef DEBUG_DISPLAY
+RW_TEXTURE2D(float4,        _DebugTexture);
+#endif
+
 // -------------------------------------------------
 // Entry point: Allocate Rays
 // -------------------------------------------------
@@ -154,14 +166,14 @@ void KNAME(
     uint2 groupThreadCoord      = DecodeMorton2D(groupThreadId);
     uint2 positionTXS           = groupCoord + groupThreadCoord;
     uint2 positionSS            = positionTXS << _SSReflectionMipResolution;
+    float2 positionNDC          = (positionSS + float2(0.5, 0.5)) * _ScreenSize.zw;
 
     // Decode Buffer
-    float depth                 = LOAD_TEXTURE2D_LOD(_DepthPyramidTexture, positionSS, 0).x;
-    PositionInputs posInput     = GetPositionInput(positionSS.xy, _ScreenSize.zw, depth, UNITY_MATRIX_I_VP, UNITY_MATRIX_V, int2(0, 0));
-    float3 V                    = GetWorldSpaceNormalizeViewDir(posInput.positionWS);
-    float3 positionWS           = posInput.positionWS;
-    float3 normalWS;
-    float perceptualRoughness;
+    float deviceDepth           = LOAD_TEXTURE2D(_CameraDepthTexture, positionSS.xy).x;
+    float3 positionWS           = ComputeWorldSpacePosition(positionNDC, deviceDepth, UNITY_MATRIX_I_VP);
+    float3 V                    = GetWorldSpaceNormalizeViewDir(positionWS);
+    float3 normalWS             = float3(0, 0, 0);
+    float perceptualRoughness   = 0;
     DecodeSSRBuffer(positionSS, normalWS, perceptualRoughness);
 
     // Calculate ray endpoints
@@ -356,8 +368,8 @@ void KNAME(
                 break;
         }
 
-        if (applyDebug)
-            _DebugTexture[positionSS] = debugColor;
+        // if (applyDebug)
+        //     _DebugTexture[positionSS] = debugColor;
     }
 #endif
 

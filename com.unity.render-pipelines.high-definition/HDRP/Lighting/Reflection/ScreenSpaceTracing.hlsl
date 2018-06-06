@@ -118,6 +118,7 @@ void CalculateRayEndPointSS(
     float rayOriginVSZ = dot(_ViewMatrixZRow.xyz, rayOriginWS);
     rayOriginVSZ += _ViewMatrixZRow.w;
     float rayDirVSZ = dot(_ViewMatrixZRow.xyz, rayDirWS);
+
     // Clip ray to near plane to avoid raymarching behind camera
     float rayLength = ((rayOriginVSZ + rayDirVSZ * kMaxRayTraceDistance) > kNearClipPlane)
         ? ((kNearClipPlane - rayOriginVSZ) / rayDirVSZ)
