@@ -1803,37 +1803,55 @@ IndirectLighting EvaluateBSDF_SSLighting(LightLoopContext lightLoopContext,
                 case DEBUGSCREENSPACETRACING_COLOR:
                     break;
                 case DEBUGSCREENSPACETRACING_WEIGHT:
+                {
                     lighting.specularTransmitted = lerp(GetIndexColor(1), GetIndexColor(2), weight);
                     weight = 1;
                     UpdateLightingHierarchyWeights(hierarchyWeight, weight);
                     return lighting;
+                }
                 default:
+                {
                     lighting.specularTransmitted = hit.debugOutput;
                     weight = 1;
                     UpdateLightingHierarchyWeights(hierarchyWeight, weight);
                     return lighting;
+                }
             }
         }
 #endif
+
+        float sceneDeviceDepth = LOAD_TEXTURE2D_LOD(_CameraDepthTexture, hit.positionSS, 0).r;
+        float sceneLinearDepth = LinearEyeDepth(sceneDeviceDepth, _ZBufferParams);
+
+        float2 samplePositionNDC = hit.positionNDC;
+        if (sceneLinearDepth < posInput.linearDepth)
+            weight = 0;
         
         if (weight == 0)
             return lighting;
 
         UpdateLightingHierarchyWeights(hierarchyWeight, weight);
-        
+
         // Resolve color
         float3 preLD = SAMPLE_TEXTURE2D_LOD(
             _ColorPyramidTexture,
             s_trilinear_clamp_sampler,
             // Offset by half a texel to properly interpolate between this pixel and its mips
-            hit.positionNDC * _ColorPyramidScale.xy + _ColorPyramidSize.zw * 0.5,
+            samplePositionNDC * _ColorPyramidScale.xy + _ColorPyramidSize.zw * 0.5,
             mipLevel
         ).rgb;
 
         // We use specularFGD as an approximation of the fresnel effect (that also handle smoothness)
         float3 F = preLightData.specularFGD;
 
-        lighting.specularTransmitted = (1.0 - F) * preLD.rgb * preLightData.transparentTransmittance * weight;
+#if 0   // Use this to have absorption for the whole ray (mimic single material entry like the water of a pool).
+        float3 transmittance = exp(-bsdfData.absorptionCoefficient * abs(hit.linearDepth - posInput.linearDepth));
+#else
+        float3 transmittance = preLightData.transparentTransmittance;
+#endif
+
+        lighting.specularTransmitted = (1.0 - F) * preLD.rgb * transmittance * weight;
+
         return lighting;
     }
 #endif
@@ -1841,7 +1859,7 @@ IndirectLighting EvaluateBSDF_SSLighting(LightLoopContext lightLoopContext,
     if (GPUImageBasedLightingType == GPUIMAGEBASEDLIGHTINGTYPE_REFLECTION && _SSReflectionEnabled == 1)
     {
         if (_SSReflectionProjectionModel == PROJECTIONMODEL_HI_Z)
-    {
+        {
             // for HiZ, we only sample the resolve texture
 
             // Read resolve texture
@@ -1858,7 +1876,7 @@ IndirectLighting EvaluateBSDF_SSLighting(LightLoopContext lightLoopContext,
             if (_DebugLightingMode == DEBUGLIGHTINGMODE_SCREEN_SPACE_TRACING_REFLECTION)
             {
                 switch (_DebugLightingSubMode)
-    {
+                {
                     case DEBUGSCREENSPACETRACING_SPECULAR_COLOR:
                         lighting.specularReflected = color.rgb;
                         weight = 1;
@@ -1873,8 +1891,8 @@ IndirectLighting EvaluateBSDF_SSLighting(LightLoopContext lightLoopContext,
             }
 #endif
 
-        return lighting;
-    }
+            return lighting;
+        }
         else if (_SSReflectionProjectionModel == PROJECTIONMODEL_PROXY)
         {
             // For proxy, we perform the raytracing in the lit pass
@@ -1905,36 +1923,36 @@ IndirectLighting EvaluateBSDF_SSLighting(LightLoopContext lightLoopContext,
             // Get hit weighting
             float weight = CalculateFullWeight(hit.positionNDC, _SSReflectionInvScreenWeightDistance, 1.0, hitSuccessful);
 
-    if (weight == 0)
-        return lighting;
+            if (weight == 0)
+                return lighting;
 
-    UpdateLightingHierarchyWeights(hierarchyWeight, weight); // Shouldn't be needed, but safer in case we decide to change hierarchy priority
+            UpdateLightingHierarchyWeights(hierarchyWeight, weight); // Shouldn't be needed, but safer in case we decide to change hierarchy priority
 
-    // Reproject color pyramid
-    float4 hitVelocityBuffer = LOAD_TEXTURE2D_LOD(
-        _CameraMotionVectorsTexture,
-        hit.positionSS,
-        0.0
-    );
+            // Reproject color pyramid
+            float4 hitVelocityBuffer = LOAD_TEXTURE2D_LOD(
+                _CameraMotionVectorsTexture,
+                hit.positionSS,
+                0.0
+            );
 
             float2 hitVelocityNDC = float2(0, 0);
-    DecodeVelocity(hitVelocityBuffer, hitVelocityNDC);
+            DecodeVelocity(hitVelocityBuffer, hitVelocityNDC);
 
-    float3 preLD = SAMPLE_TEXTURE2D_LOD(
-        _ColorPyramidTexture,
-        s_trilinear_clamp_sampler,
-        // Offset by half a texel to properly interpolate between this pixel and its mips
-        (hit.positionNDC - hitVelocityNDC) * _ColorPyramidScale.xy + _ColorPyramidSize.zw * 0.5,
-                PlanarPerceptualRoughnessToMipmapLevel(bsdfData.perceptualRoughness, _ColorPyramidScale.z)
-        ).rgb;
+            float3 preLD = SAMPLE_TEXTURE2D_LOD(
+                _ColorPyramidTexture,
+                s_trilinear_clamp_sampler,
+                // Offset by half a texel to properly interpolate between this pixel and its mips
+                (hit.positionNDC - hitVelocityNDC) * _ColorPyramidScale.xy + _ColorPyramidSize.zw * 0.5,
+                        PlanarPerceptualRoughnessToMipmapLevel(bsdfData.perceptualRoughness, _ColorPyramidScale.z)
+                ).rgb;
 
-    // We use specularFGD as an approximation of the fresnel effect (that also handle smoothness)
-    float3 F = preLightData.specularFGD;
-        lighting.specularReflected = F * preLD.rgb * weight;
+            // We use specularFGD as an approximation of the fresnel effect (that also handle smoothness)
+            float3 F = preLightData.specularFGD;
+            lighting.specularReflected = F * preLD.rgb * weight;
 
 #if DEBUG_DISPLAY
             if (_DebugLightingMode == DEBUGLIGHTINGMODE_SCREEN_SPACE_TRACING_REFLECTION)
-    {
+            {
                 switch (_DebugLightingSubMode)
                 {
                     case DEBUGSCREENSPACETRACING_SPECULAR_COLOR:
@@ -1947,11 +1965,11 @@ IndirectLighting EvaluateBSDF_SSLighting(LightLoopContext lightLoopContext,
                         UpdateLightingHierarchyWeights(hierarchyWeight, weight);
                         break;
                 }
-    }
+            }
 #endif
 
-        return lighting;
-    }
+            return lighting;
+        }
     }
 
     return lighting;
@@ -2164,7 +2182,7 @@ void PostEvaluateBSDF(  LightLoopContext lightLoopContext,
                 break;
             }
             break;
-            
+
         case DEBUGLIGHTINGMODE_SCREEN_SPACE_TRACING_REFLECTION:
             switch (_DebugLightingSubMode)
             {
