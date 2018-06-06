@@ -1825,7 +1825,8 @@ IndirectLighting EvaluateBSDF_SSLighting(LightLoopContext lightLoopContext,
 
         float2 samplePositionNDC = hit.positionNDC;
         if (sceneLinearDepth < posInput.linearDepth)
-            weight = 0;
+            // TODO: In that case we should fallback on the reflection probe
+            samplePositionNDC = posInput.positionNDC;
         
         if (weight == 0)
             return lighting;
