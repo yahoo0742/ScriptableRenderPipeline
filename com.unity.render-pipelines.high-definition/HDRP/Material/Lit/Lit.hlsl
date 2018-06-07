@@ -1864,7 +1864,7 @@ IndirectLighting EvaluateBSDF_SSLighting(LightLoopContext lightLoopContext,
             // for HiZ, we only sample the resolve texture
 
             // Read resolve texture
-            float4 color = SAMPLE_TEXTURE2D(_SSReflectionResolveTexture, s_linear_clamp_sampler, posInput.positionNDC);
+            float4 color = SAMPLE_TEXTURE2D_LOD(_SSReflectionResolveTexture, s_linear_clamp_sampler, posInput.positionNDC, 0);
             float weight = color.a;
 
             // We use specularFGD as an approximation of the fresnel effect (that also handle smoothness)

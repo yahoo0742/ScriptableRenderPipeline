@@ -94,18 +94,12 @@ uint GetIndex(uint2 groupId, uint groupThreadId)
 
 void DecodeSSRBuffer(uint2 positionSS, out float3 normalWS, out float perceptualRoughness)
 {
-    GBufferType1 inGBuffer1 = LOAD_TEXTURE2D(_GBufferTexture1, positionSS);
-    float3 packNormalWS = inGBuffer1.rgb;
-    float2 octNormalWS = Unpack888ToFloat2(packNormalWS);
-    normalWS = UnpackNormalOctQuadEncode(octNormalWS * 2.0 - 1.0);
-    perceptualRoughness = inGBuffer1.a;
+    BSDFData bsdfData;
+    BakeLightingData bakeLightingData;
 
-    // BSDFData bsdfData;
-    // BakeLightingData bakeLightingData;
-
-    // DECODE_FROM_GBUFFER(positionSS, 0, bsdfData, bakeLightingData.bakeDiffuseLighting);
-    // normalWS            = bsdfData.normalWS;
-    // perceptualRoughness = bsdfData.perceptualRoughness;
+    DECODE_FROM_GBUFFER(positionSS, 0, bsdfData, bakeLightingData.bakeDiffuseLighting);
+    normalWS            = bsdfData.normalWS;
+    perceptualRoughness = bsdfData.perceptualRoughness;
 }
 
 // #################################################
