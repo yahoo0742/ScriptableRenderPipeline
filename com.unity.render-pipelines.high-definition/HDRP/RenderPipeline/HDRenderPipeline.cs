@@ -955,8 +955,6 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
                     // In both forward and deferred, everything opaque should have been rendered at this point so we can safely copy the depth buffer for later processing.
                     CopyDepthBufferIfNeeded(cmd);
                     RenderDepthPyramid(hdCamera, cmd, renderContext, FullScreenDebugMode.DepthPyramid);
-                    var debugWritten = m_ScreenSpaceReflectionRenderer.RenderSSR(hdCamera, cmd, m_CurrentDebugDisplaySettings.IsDebugDisplayEnabled(), m_DebugFullScreenTempBuffer);
-                    SetFullscreenDebugTexturePushed(debugWritten);
 
                     // TODO: In the future we will render object velocity at the same time as depth prepass (we need C++ modification for this)
                     // Once the C++ change is here we will first render all object without motion vector then motion vector object
@@ -982,6 +980,13 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
                     else
                     {
                         StartStereoRendering(renderContext, hdCamera);
+
+                        
+                        using (new ProfilingSample(cmd, "Render SSR", CustomSamplerId.RenderSSR.GetSampler()))
+                        {
+                            var debugWritten = m_ScreenSpaceReflectionRenderer.RenderSSR(hdCamera, cmd, m_CurrentDebugDisplaySettings.IsDebugDisplayEnabled(), m_DebugFullScreenTempBuffer);
+                            SetFullscreenDebugTexturePushed(debugWritten);
+                        }
 
                         using (new ProfilingSample(cmd, "Render SSAO", CustomSamplerId.RenderSSAO.GetSampler()))
                         {
