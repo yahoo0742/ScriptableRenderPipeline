@@ -429,7 +429,7 @@ namespace UnityEngine.Experimental.Rendering
                         {
                             innerTypes = t.GetTypes();
                         }
-                        catch {}
+                        catch { }
                         return innerTypes;
                     });
             }
@@ -552,11 +552,11 @@ namespace UnityEngine.Experimental.Rendering
         }
 
         // Returns 'true' if "Animated Materials" are enabled for the view associated with the given camera.
-        public static  bool AreAnimatedMaterialsEnabled(Camera camera)
+        public static bool AreAnimatedMaterialsEnabled(Camera camera)
         {
             bool animateMaterials = true;
 
-        #if UNITY_EDITOR
+#if UNITY_EDITOR
             animateMaterials = Application.isPlaying;
 
             if (camera.cameraType == CameraType.SceneView)
@@ -605,7 +605,7 @@ namespace UnityEngine.Experimental.Rendering
             // which simply amounts to a recursive call, and then the story repeats itself.
             //
             // TLDR: we need to know the caller and its status/properties to make decisions.
-        #endif
+#endif
 
             return animateMaterials;
         }
@@ -632,21 +632,6 @@ namespace UnityEngine.Experimental.Rendering
 #endif
 
             return fogEnable;
-        }
-
-        static public void CheckOutFile(bool VSCEnabled, UnityObject mat)
-        {
-            if (VSCEnabled)
-            {
-#if UNITY_EDITOR
-                UnityEditor.VersionControl.Task task = UnityEditor.VersionControl.Provider.Checkout(mat, UnityEditor.VersionControl.CheckoutMode.Both);
-
-                if (!task.success)
-                {
-                    Debug.Log(task.text + " " + task.resultCode);
-                }
-#endif
-            }
         }
     }
 }
