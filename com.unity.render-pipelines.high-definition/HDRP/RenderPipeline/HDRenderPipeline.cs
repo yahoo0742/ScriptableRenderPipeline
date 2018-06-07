@@ -212,7 +212,7 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
                     );
             m_BufferPyramid = new BufferPyramid(bufferPyramidProcessor);
             m_ScreenSpaceReflectionRenderer = new ScreenSpaceReflectionRenderer(
-                new ScreenSpaceReflectionRenderer.Settings { MaxRayAllocation = 2560 * 1440, ResolutionMip = 0 }, // TODO: Expose this in HDRenderPipeline
+                new ScreenSpaceReflectionRenderer.Settings { ResolutionMip = 0 }, // TODO: Expose this in HDRenderPipeline
                 RTHandles.DefaultInstance,
                 asset.renderPipelineResources.screenSpaceReflectionsCS
             );
@@ -313,8 +313,7 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
                 m_VelocityBuffer = RTHandles.Alloc(Vector2.one, filterMode: FilterMode.Point, colorFormat: Builtin.GetVelocityBufferFormat(), sRGB: Builtin.GetVelocityBufferSRGBFlag(), enableMSAA: true, name: "Velocity");
             }
 
-            if (m_Asset.renderPipelineSettings.supportSSR)
-                m_ScreenSpaceReflectionRenderer.AllocateBuffers(m_Asset.renderPipelineSettings);
+            m_ScreenSpaceReflectionRenderer.AllocateBuffers(m_Asset.renderPipelineSettings);
 
             m_DistortionBuffer = RTHandles.Alloc(Vector2.one, filterMode: FilterMode.Point, colorFormat: Builtin.GetDistortionBufferFormat(), sRGB: Builtin.GetDistortionBufferSRGBFlag(), name: "Distortion");
 
@@ -554,12 +553,14 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
                 m_LightLoop.AllocResolutionDependentBuffers((int)hdCamera.screenSize.x, (int)hdCamera.screenSize.y, hdCamera.frameSettings.enableStereo);
             }
 
+            m_ScreenSpaceReflectionRenderer.AllocateCameraBuffersIfRequired(hdCamera);
+
             // update recorded window resolution
             m_CurrentWidth = hdCamera.actualWidth;
             m_CurrentHeight = hdCamera.actualHeight;
         }
 
-        public void PushGlobalParams(HDCamera hdCamera, CommandBuffer cmd, FrameSettings frameSettings, DiffusionProfileSettings sssParameters)
+        public void PushGlobalParams(HDCamera hdCamera, CommandBuffer cmd, DiffusionProfileSettings sssParameters)
         {
             using (new ProfilingSample(cmd, "Push Global Parameters", CustomSamplerId.PushGlobalParameters.GetSampler()))
             {
@@ -576,12 +577,12 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
                 var ssReflection = VolumeManager.instance.stack.GetComponent<ScreenSpaceReflection>()
                     ?? ScreenSpaceReflection.@default;
                 ssReflection.PushShaderParameters(cmd);
-                if (frameSettings.enableSSR)
-                    m_ScreenSpaceReflectionRenderer.PushGlobalParams(hdCamera, cmd, frameSettings);
+                if (hdCamera.frameSettings.enableSSR)
+                    m_ScreenSpaceReflectionRenderer.PushGlobalParams(hdCamera, cmd);
 
                 // Set up UnityPerView CBuffer.
                 hdCamera.SetupGlobalParams(cmd, m_Time, m_LastTime, m_FrameCount);
-                if (frameSettings.enableStereo)
+                if (hdCamera.frameSettings.enableStereo)
                     hdCamera.SetupGlobalStereoParams(cmd);
 
                 cmd.SetGlobalInt(HDShaderIDs._SSReflectionEnabled, hdCamera.frameSettings.enableSSR ? 1 : 0);
@@ -858,9 +859,6 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
                         hdCamera = HDCamera.Create(camera, m_VolumetricLightingSystem);
                     }
 
-                    if (currentFrameSettings.enableSSR)
-                        m_ScreenSpaceReflectionRenderer.AllocateCameraBuffersIfRequired(hdCamera);
-
                     // From this point, we should only use frame settings from the camera
                     hdCamera.Update(currentFrameSettings, postProcessLayer, m_VolumetricLightingSystem);
 
@@ -918,7 +916,7 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
                     }
                     renderContext.SetupCameraProperties(camera, hdCamera.frameSettings.enableStereo);
 
-                    PushGlobalParams(hdCamera, cmd, currentFrameSettings, diffusionProfileSettings);
+                    PushGlobalParams(hdCamera, cmd, diffusionProfileSettings);
 
                     // TODO: Find a correct place to bind these material textures
                     // We have to bind the material specific global parameters in this mode
@@ -957,16 +955,8 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
                     // In both forward and deferred, everything opaque should have been rendered at this point so we can safely copy the depth buffer for later processing.
                     CopyDepthBufferIfNeeded(cmd);
                     RenderDepthPyramid(hdCamera, cmd, renderContext, FullScreenDebugMode.DepthPyramid);
-                    if (currentFrameSettings.enableSSR)
-                    {
-                        m_ScreenSpaceReflectionRenderer.RenderSSR(
-                            hdCamera, 
-                            cmd, 
-                            m_CurrentDebugDisplaySettings.IsDebugDisplayEnabled(),
-                            m_DebugFullScreenTempBuffer
-                        );
-                        m_FullScreenDebugPushed = true;
-                    }
+                    var debugWritten = m_ScreenSpaceReflectionRenderer.RenderSSR(hdCamera, cmd, m_CurrentDebugDisplaySettings.IsDebugDisplayEnabled(), m_DebugFullScreenTempBuffer);
+                    SetFullscreenDebugTexturePushed(debugWritten);
 
                     // TODO: In the future we will render object velocity at the same time as depth prepass (we need C++ modification for this)
                     // Once the C++ change is here we will first render all object without motion vector then motion vector object
@@ -1812,6 +1802,11 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
                 // TODO: Be sure that if there is no change in the state of this keyword, it doesn't imply any work on CPU side! else we will need to save the sate somewher
                 cmd.DisableShaderKeyword("DEBUG_DISPLAY");
             }
+        }
+
+        public void SetFullscreenDebugTexturePushed(bool value)
+        {
+            m_FullScreenDebugPushed = m_FullScreenDebugPushed || value;
         }
 
         public void PushColorPickerDebugTexture(CommandBuffer cmd, RTHandleSystem.RTHandle textureID, HDCamera hdCamera)

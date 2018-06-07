@@ -11,11 +11,6 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
         public struct Settings
         {
             /// <summary>
-            /// Maximum number of ray allocation per rendering
-            /// </summary>
-            public int MaxRayAllocation;
-
-            /// <summary>
             /// Mip to use for raymarching and color resolve
             /// </summary>
             public int ResolutionMip;
@@ -111,36 +106,30 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
 
         public void AllocateBuffers(RenderPipelineSettings settings)
         {
-            // TODO: Allocate HiZ buffer only if supported
-            m_DispatchIndirectBuffer = new ComputeBuffer(
-                3,
-                Marshal.SizeOf(typeof(uint)), 
-                ComputeBufferType.IndirectArguments
-            );
-            m_PayloadBuffer = new ComputeBuffer(
-                m_Settings.MaxRayAllocation, 
-                Marshal.SizeOf(typeof(uint)), 
-                ComputeBufferType.Default
-            );
-            m_Payload1Buffer = new ComputeBuffer(
-                m_Settings.MaxRayAllocation, 
-                Marshal.SizeOf(typeof(float)) * 4, 
-                ComputeBufferType.Default
-            );
-            m_Payload2Buffer = new ComputeBuffer(
-                m_Settings.MaxRayAllocation, 
-                Marshal.SizeOf(typeof(float)) * 4, 
-                ComputeBufferType.Default
-            );
+            if (settings.supportSSR)
+            {
+                m_DispatchIndirectBuffer = new ComputeBuffer(
+                    3,
+                    Marshal.SizeOf(typeof(uint)), 
+                    ComputeBufferType.IndirectArguments
+                );
+
+                AllocateScreenDependentBuffers(new Vector2Int(1920, 1080));
+            }
         }
 
         public void AllocateCameraBuffersIfRequired(HDCamera hdCamera)
         {
-            if (hdCamera.GetCurrentFrameRT((int)HDCameraFrameHistoryType.SSReflectionRayHit) == null)
-                hdCamera.AllocHistoryFrameRT((int)HDCameraFrameHistoryType.SSReflectionRayHit, AllocateCameraBufferRayHit);
+            if (hdCamera.frameSettings.enableSSR)
+            {
+                if (hdCamera.GetCurrentFrameRT((int)HDCameraFrameHistoryType.SSReflectionRayHit) == null)
+                    hdCamera.AllocHistoryFrameRT((int)HDCameraFrameHistoryType.SSReflectionRayHit, AllocateCameraBufferRayHit);
 
-            if (hdCamera.GetCurrentFrameRT((int)HDCameraFrameHistoryType.SSReflectionResolve) == null)
-                hdCamera.AllocHistoryFrameRT((int)HDCameraFrameHistoryType.SSReflectionResolve, AllocateCameraBufferResolve);
+                if (hdCamera.GetCurrentFrameRT((int)HDCameraFrameHistoryType.SSReflectionResolve) == null)
+                    hdCamera.AllocHistoryFrameRT((int)HDCameraFrameHistoryType.SSReflectionResolve, AllocateCameraBufferResolve);
+
+                AllocateScreenDependentBuffers(new Vector2Int(hdCamera.actualWidth, hdCamera.actualHeight));
+            }
         }
 
         public void ClearBuffers(CommandBuffer cmd, HDCamera hdCamera)
@@ -160,7 +149,7 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
             m_Payload2Buffer = null;
         }
 
-        public void PushGlobalParams(HDCamera hdCamera, CommandBuffer cmd, FrameSettings frameSettings)
+        public void PushGlobalParams(HDCamera hdCamera, CommandBuffer cmd)
         {
             Assert.IsNotNull(hdCamera.GetCurrentFrameRT((int)HDCameraFrameHistoryType.SSReflectionRayHit));
 
@@ -173,23 +162,59 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
             cmd.SetGlobalInt(CSMeta._SSReflectionMipResolution, m_Settings.ResolutionMip);
         }
 
-        public void RenderSSR(
+        public bool RenderSSR(
             HDCamera hdCamera, 
             CommandBuffer cmd, 
             bool debug,
             RTHandleSystem.RTHandle debugTextureHandle
         )
         {
+            if (!hdCamera.frameSettings.enableSSR)
+                return false;
+
             var ssReflection = VolumeManager.instance.stack.GetComponent<ScreenSpaceReflection>()
                     ?? ScreenSpaceReflection.@default;
 
             var projectionModel     = (Lit.ProjectionModel)ssReflection.deferredProjectionModel.value;
 
-            if (projectionModel == Lit.ProjectionModel.HiZ)
-                RenderPassAllocateRays(hdCamera, cmd, debug, debugTextureHandle, ssReflection);
+            if (projectionModel != Lit.ProjectionModel.HiZ)
+                return false;
 
+            RenderPassAllocateRays(hdCamera, cmd, debug, debugTextureHandle, ssReflection);
             RenderPassCastRays(hdCamera, cmd, debug, debugTextureHandle, ssReflection);
             RenderPassResolve(hdCamera, cmd, debug, debugTextureHandle, ssReflection);
+            return debug;
+        }
+
+        void AllocateScreenDependentBuffers(Vector2Int screenSize)
+        {
+            var amount = screenSize.x * screenSize.y;
+            
+            if (m_PayloadBuffer != null && m_Payload1Buffer.count == amount)
+                return;
+
+            if (m_PayloadBuffer != null)
+            {
+                m_PayloadBuffer.Dispose();
+                m_Payload1Buffer.Dispose();
+                m_Payload2Buffer.Dispose();
+            }
+
+            m_PayloadBuffer = new ComputeBuffer(
+                amount, 
+                Marshal.SizeOf(typeof(uint)), 
+                ComputeBufferType.Default
+            );
+            m_Payload1Buffer = new ComputeBuffer(
+                amount, 
+                Marshal.SizeOf(typeof(float)) * 4, 
+                ComputeBufferType.Default
+            );
+            m_Payload2Buffer = new ComputeBuffer(
+                amount, 
+                Marshal.SizeOf(typeof(float)) * 4, 
+                ComputeBufferType.Default
+            );
         }
 
         void RenderPassClear(
