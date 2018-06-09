@@ -12,14 +12,23 @@
 ## [2018.2 / next ]
 - Add Light -> Planar Reflection Probe command
 - Added a false color mode in rendering debug
+- Add support for mesh decals
+- Add flag to disable projector decals on transparent geometry to save performance and decal texture atlas space
+- Add ability to use decal diffuse map as mask only
+- Add visualize all shadow masks in lighting debug
+- Add export of normal and roughness buffer for forwardOnly and when in supportOnlyForward mode for forward
+- Provide a define in lit.hlsl (FORWARD_MATERIAL_READ_FROM_WRITTEN_NORMAL_BUFFER) when output buffer normal is used to read the normal and roughness instead of caclulating it (can save performance, but lower quality due to compression)
+- Add color swatch to decal material
 
 ### Improvements
 
 ### Changed, Removals and deprecations
 - Change Render -> Planar Reflection creation to 3D Object -> Mirror
 - Change "Enable Reflector" name on SpotLight to "Angle Affect Intensity"
+- Change prototype of BSDFData ConvertSurfaceDataToBSDFData(SurfaceData surfaceData) to BSDFData ConvertSurfaceDataToBSDFData(uint2 positionSS, SurfaceData surfaceData)
 
 ### Bug fixes
+- Fix issue with StackLit in deferred mode with deferredDirectionalShadow due to GBuffer not being cleared. Gbuffer is still not clear and issue was fix with the new Output of normal buffer.
 
 ## [2018.2 / 2.0.1-preview]
 
@@ -55,6 +64,7 @@
 - Fix warning when creating Planar reflection
 - Fix specular lighting debug mode (was rendering black)
 - Allow projector decal with null material to allow to configure decal when HDRP is not set
+- Decal atlas texture offset/scale is updated after allocations (used to be before so it was using date from previous frame)
 
 ## [2018.1 undecided]
 
