@@ -84,7 +84,7 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
 
         ComputeShader m_CS;
         CSMeta m_Kernels;
-        RTHandleSystem m_RTHSystem;
+        //RTHandleSystem m_RTHSystem;
         ComputeBuffer m_DispatchIndirectBuffer;
         ComputeBuffer m_PayloadBuffer;
         ComputeBuffer m_Payload1Buffer;
@@ -98,7 +98,7 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
             ComputeShader cs
         )
         {
-            m_RTHSystem = rthSystem;
+            //m_RTHSystem = rthSystem;
             m_CS = cs;
             m_Kernels.FindKernels(m_CS);
             m_Settings = settings;
