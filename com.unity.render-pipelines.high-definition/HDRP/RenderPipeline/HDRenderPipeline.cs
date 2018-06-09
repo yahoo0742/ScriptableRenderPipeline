@@ -1180,7 +1180,7 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
 
                     // Assign -1 in tracing model to notifiy we took the data.
                     // When debugging in forward, we want only the first time the pixel is drawn
-                    data.tracingModel = (Lit.ProjectionModel)(-1);
+                    data.tracingModel = (ScreenSpaceLighting.ProjectionModel)(-1);
                     m_DebugScreenSpaceTracingDataArray[0] = data;
                     m_DebugScreenSpaceTracingData.SetData(m_DebugScreenSpaceTracingDataArray);
                 }

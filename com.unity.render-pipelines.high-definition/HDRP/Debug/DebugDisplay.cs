@@ -33,7 +33,7 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
     {
         // Used to debug SSRay model
         // 1x32 bits
-        public Lit.ProjectionModel tracingModel;
+        public ScreenSpaceLighting.ProjectionModel tracingModel;
 
         // 6x32 bits
         public uint loopStartPositionSSX;                           // Proxy, HiZ, Linear
@@ -49,7 +49,7 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
         public uint iteration;                                      // HiZ, Linear
         public float iterationLinearDepthBufferMin;                 // HiZ, Linear
         public float iterationLinearDepthBufferMinThickness;        // HiZ, Linear
-        public Lit.HiZIntersectionKind iterationIntersectionKind;   // HiZ
+        public ScreenSpaceLighting.HiZIntersectionKind iterationIntersectionKind;   // HiZ
         public uint iterationCellSizeW;                             // HiZ, Linear
         public uint iterationCellSizeH;                             // HiZ, Linear
         public EnvShapeType proxyShapeType;                         // Proxy
@@ -124,7 +124,7 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
         public static GUIContent[] debuggedAlgorithmStrings = null;
         public static int[] debuggedAlgorithmValues = null;
 
-        Lit.ProjectionModel m_LastProjectionModel = Lit.ProjectionModel.None;
+        ScreenSpaceLighting.ProjectionModel m_LastProjectionModel = ScreenSpaceLighting.ProjectionModel.None;
         ScreenSpaceTracingDebug m_ScreenSpaceTracingDebugData;
         public ScreenSpaceTracingDebug screenSpaceTracingDebugData
         {
@@ -135,10 +135,10 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
                 if (m_LastProjectionModel != m_ScreenSpaceTracingDebugData.tracingModel)
                 {
                     m_LastProjectionModel = m_ScreenSpaceTracingDebugData.tracingModel;
-                    RefreshScreenSpaceTracingDebug<Lit.ProjectionModel>(null, m_LastProjectionModel);
+                    RefreshScreenSpaceTracingDebug<ScreenSpaceLighting.ProjectionModel>(null, m_LastProjectionModel);
                 }
 
-                if (m_ScreenSpaceTracingDebugData.tracingModel == Lit.ProjectionModel.Proxy)
+                if (m_ScreenSpaceTracingDebugData.tracingModel == ScreenSpaceLighting.ProjectionModel.Proxy)
                 {
                     showSSRayDepthPyramid = false;
                     showSSRayGrid = false;
@@ -191,7 +191,7 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
             debugScreenSpaceTracingProxyValues = debugScreenSpaceTracingProxyValueList.ToArray();
             debugScreenSpaceTracingLinearStrings = debugScreenSpaceTracingLinearStringsList.ToArray();
             debugScreenSpaceTracingLinearValues = debugScreenSpaceTracingLinearValueList.ToArray();
-            var litProjectionModels = Enum.GetNames(typeof(Lit.ProjectionModel))
+            var litProjectionModels = Enum.GetNames(typeof(ScreenSpaceLighting.ProjectionModel))
                 .Select((t, i) => new { c = new GUIContent(t), v = i })
                 .Where(n => n.c.text != "None" && n.c.text != "Count");
             debuggedAlgorithmStrings = litProjectionModels.Select(c => c.c).ToArray();
@@ -443,7 +443,7 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
 
                 switch (screenSpaceTracingDebugData.tracingModel)
                 {
-                    case Lit.ProjectionModel.Proxy:
+                    case ScreenSpaceLighting.ProjectionModel.Proxy:
                     {
                         debugSettingsContainer.children.Add(
                             new DebugUI.EnumField { displayName = "Debug Mode", getter = GetDebugLightingSubMode, setter = SetScreenSpaceTracingDebugMode, enumNames = debugScreenSpaceTracingProxyStrings, enumValues = debugScreenSpaceTracingProxyValues, onValueChanged = RefreshScreenSpaceTracingDebug }
@@ -467,7 +467,7 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
                             );
                         break;
                     }
-                    case Lit.ProjectionModel.HiZ:
+                    case ScreenSpaceLighting.ProjectionModel.HiZ:
                     {
                         debugSettingsContainer.children.Insert(1, new DebugUI.Value { displayName = string.Empty, getter = () => "Press PageUp/PageDown to Increase/Decrease the HiZ step." });
                         debugSettingsContainer.children.Add(
@@ -513,7 +513,7 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
                             );
                         break;
                     }
-                    case Lit.ProjectionModel.Linear:
+                    case ScreenSpaceLighting.ProjectionModel.Linear:
                     {
                         debugSettingsContainer.children.Add(
                             new DebugUI.EnumField { displayName = "Debug Mode", getter = GetDebugLightingSubMode, setter = SetScreenSpaceTracingDebugMode, enumNames = debugScreenSpaceTracingLinearStrings, enumValues = debugScreenSpaceTracingLinearValues, onValueChanged = RefreshScreenSpaceTracingDebug },

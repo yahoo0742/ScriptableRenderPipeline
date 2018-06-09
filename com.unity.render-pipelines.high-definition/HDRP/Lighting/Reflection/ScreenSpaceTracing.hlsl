@@ -26,9 +26,6 @@
 //
 // Use library here, like ScreenSpaceProxyRaycastReflection(...)
 
-// #################################################
-// Notes
-// #################################################
 // Some banding issues can occurs when raymarching the depth buffer.
 //
 // This can be hidden by offsetting the ray origin with a jitter.
@@ -54,9 +51,9 @@
 //              xx
 
 
-// #################################################
+// -------------------------------------------------
 // Screen Space Tracing Library
-// #################################################
+// -------------------------------------------------
 
 // -------------------------------------------------
 // Algorithm uniform parameters

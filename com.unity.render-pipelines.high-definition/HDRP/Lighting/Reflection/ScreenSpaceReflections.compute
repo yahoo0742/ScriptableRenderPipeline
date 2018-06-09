@@ -50,12 +50,12 @@
 #include "CoreRP/ShaderLibrary/SpaceFillingCurves.hlsl"
 #include "CoreRP/ShaderLibrary/Debug.hlsl"
 
-#define UNITY_MATERIAL_LIT // Need to be define before including Material.hlsl
 #include "HDRP/ShaderVariables.hlsl"
 #ifdef DEBUG_DISPLAY
 #include "HDRP/Debug/DebugDisplay.hlsl"
 #endif
-#include "HDRP/Material/Material.hlsl"
+#define UNITY_MATERIAL_LIT // Need to be define before including Material.hlsl
+#include "HDRP/Material/Material.hlsl" // This will include #include "ScreenSpaceLighting.hlsl" with Lit.hlsl
 
 // -------------------------------------------------
 // Common
@@ -86,12 +86,10 @@ uint GetIndex(uint2 groupId, uint groupThreadId)
 
 void DecodeSSRBuffer(uint2 positionSS, out float3 normalWS, out float perceptualRoughness)
 {
-    BSDFData bsdfData;
-    BakeLightingData bakeLightingData;
-
-    DECODE_FROM_GBUFFER(positionSS, 0, bsdfData, bakeLightingData.bakeDiffuseLighting);
-    normalWS            = bsdfData.normalWS;
-    perceptualRoughness = bsdfData.perceptualRoughness;
+    NormalData normalData;
+    DecodeFromNormalBuffer(positionSS, normalData);
+    normalWS = normalData.normalWS;
+    perceptualRoughness = normalData.perceptualRoughness;
 }
 
 // #################################################

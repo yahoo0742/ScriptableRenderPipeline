@@ -21,31 +21,6 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
             LitClearCoat            = 1 << 6
         };
 
-        public enum RefractionModel
-        {
-            None = 0,
-            Plane = 1,
-            Sphere = 2
-        };
-
-        [GenerateHLSL]
-        public enum ProjectionModel
-        {
-            None,
-            Proxy,
-            HiZ,
-            Linear,
-            Count
-        };
-
-        [GenerateHLSL]
-        public enum HiZIntersectionKind
-        {
-            None,
-            Cell,
-            Depth
-        }
-
         //-----------------------------------------------------------------------------
         // SurfaceData
         //-----------------------------------------------------------------------------

@@ -175,9 +175,9 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
             var ssReflection = VolumeManager.instance.stack.GetComponent<ScreenSpaceReflection>()
                     ?? ScreenSpaceReflection.@default;
 
-            var projectionModel     = (Lit.ProjectionModel)ssReflection.deferredProjectionModel.value;
+            var projectionModel = (ScreenSpaceLighting.ProjectionModel)ssReflection.deferredProjectionModel.value;
 
-            if (projectionModel != Lit.ProjectionModel.HiZ)
+            if (projectionModel != ScreenSpaceLighting.ProjectionModel.HiZ)
                 return false;
 
             RenderPassAllocateRays(hdCamera, cmd, debug, debugTextureHandle, ssReflection);

@@ -162,17 +162,9 @@ uint TileVariantToFeatureFlags(uint variant, uint tileIndex)
 // SSReflection
 #include "HDRP/Lighting/LightDefinition.cs.hlsl"
 #include "HDRP/Lighting/Reflection/VolumeProjection.hlsl"
-
-#define SSRTID Reflection
-#include "HDRP/Lighting/Reflection/ScreenSpaceTracing.hlsl"
-#undef SSRTID
+#include "HDRP/Lighting/Reflection/ScreenSpaceLighting.hlsl"
 
 #if HAS_REFRACTION
-    #include "CoreRP/ShaderLibrary/Refraction.hlsl"
-    #define SSRTID Refraction
-    #include "HDRP/Lighting/Reflection/ScreenSpaceTracing.hlsl"
-    #undef SSRTID
-
     #if defined(_REFRACTION_PLANE)
     #define REFRACTION_MODEL(V, posInputs, bsdfData) RefractionModelPlane(V, posInputs.positionWS, bsdfData.normalWS, bsdfData.ior, bsdfData.thickness)
     #elif defined(_REFRACTION_SPHERE)
