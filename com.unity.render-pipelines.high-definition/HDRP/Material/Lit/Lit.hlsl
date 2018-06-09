@@ -162,7 +162,7 @@ uint TileVariantToFeatureFlags(uint variant, uint tileIndex)
 // SSReflection
 #include "HDRP/Lighting/LightDefinition.cs.hlsl"
 #include "HDRP/Lighting/Reflection/VolumeProjection.hlsl"
-#include "HDRP/Lighting/Reflection/ScreenSpaceLighting.hlsl"
+#include "HDRP/Lighting/ScreenSpaceLighting/ScreenSpaceLighting.hlsl"
 
 #if HAS_REFRACTION
     #if defined(_REFRACTION_PLANE)
