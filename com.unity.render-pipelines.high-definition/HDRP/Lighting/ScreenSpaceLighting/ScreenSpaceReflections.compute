@@ -60,6 +60,12 @@
 #include "HDRP/Material/Material.hlsl" // This will include #include "ScreenSpaceLighting.hlsl" with Lit.hlsl
 
 // -------------------------------------------------
+// Variable
+// -------------------------------------------------
+
+TEXTURE2D(_SSReflectionRayHitTexture);
+
+// -------------------------------------------------
 // Common
 // -------------------------------------------------
 struct AllocationPayload
