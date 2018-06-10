@@ -1898,7 +1898,7 @@ IndirectLighting EvaluateBSDF_SSLighting(LightLoopContext lightLoopContext,
                     case DEBUGSCREENSPACETRACING_WEIGHT:
                         lighting.specularReflected = weight;
                         weight = 1;
-        UpdateLightingHierarchyWeights(hierarchyWeight, weight);
+                        UpdateLightingHierarchyWeights(hierarchyWeight, weight);
                         break;
                 }
             }

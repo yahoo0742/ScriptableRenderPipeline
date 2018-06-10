@@ -1,5 +1,7 @@
 #pragma only_renderers d3d11 ps4 xboxone vulkan metal switch
 
+//#pragma enable_d3d11_debug_symbols
+
 // -------------------------------------------------
 // Screen Space Reflection
 // -------------------------------------------------
@@ -84,14 +86,6 @@ uint GetIndex(uint2 groupId, uint groupThreadId)
     return groupThreadId + (groupId.y * groupPerRow + groupId.x) * GROUP_SIZE_2D + 3;
 }
 
-void DecodeSSRBuffer(uint2 positionSS, out float3 normalWS, out float perceptualRoughness)
-{
-    NormalData normalData;
-    DecodeFromNormalBuffer(positionSS, normalData);
-    normalWS = normalData.normalWS;
-    perceptualRoughness = normalData.perceptualRoughness;
-}
-
 // #################################################
 // Pass: Clear
 // #################################################
@@ -156,9 +150,12 @@ void KNAME(
     float deviceDepth           = LOAD_TEXTURE2D(_CameraDepthTexture, positionSS.xy).x;
     float3 positionWS           = ComputeWorldSpacePosition(positionNDC, deviceDepth, UNITY_MATRIX_I_VP);
     float3 V                    = GetWorldSpaceNormalizeViewDir(positionWS);
-    float3 normalWS             = float3(0, 0, 0);
-    float perceptualRoughness   = 0;
-    DecodeSSRBuffer(positionSS, normalWS, perceptualRoughness);
+
+    // Get normal and roughness from normalBuffer
+    NormalData normalData;
+    DecodeFromNormalBuffer(positionSS, normalData);
+    float3 normalWS = normalData.normalWS;
+    float perceptualRoughness = normalData.perceptualRoughness;
 
     // Calculate ray endpoints
     float3 rayOriginWS          = positionWS;
@@ -278,7 +275,7 @@ void KNAME(
     uint4 payload = asuint(LOAD_TEXTURE2D_LOD(_SSReflectionRayHitTexture, positionTXS, 0));
     DecodeRayHit(payload, hitPositionSS, hitPositionNDC, hitWeight, hitSuccessful, perceptualRoughness);
 
-    int mipLevel                = PlanarPerceptualRoughnessToMipmapLevel(perceptualRoughness, _ColorPyramidScale.z);
+    int mipLevel = PlanarPerceptualRoughnessToMipmapLevel(perceptualRoughness, _ColorPyramidScale.z);
 
     float weight = CalculateFullWeight(hitPositionNDC, _SSReflectionInvScreenWeightDistance, hitWeight, hitSuccessful);
 

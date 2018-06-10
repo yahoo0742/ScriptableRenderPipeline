@@ -10,9 +10,7 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
     {
         public struct Settings
         {
-            /// <summary>
             /// Mip to use for raymarching and color resolve
-            /// </summary>
             public int ResolutionMip;
         }
 
@@ -268,12 +266,6 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
                     kernel,
                     CSMeta._PayloadIndirect,
                     m_DispatchIndirectBuffer
-                );
-                cmd.SetComputeBufferParam(
-                    m_CS,
-                    kernel,
-                    CSMeta._Payload,
-                    m_PayloadBuffer
                 );
                 cmd.SetComputeBufferParam(
                     m_CS,
