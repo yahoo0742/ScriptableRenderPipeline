@@ -699,14 +699,11 @@ namespace UnityEditor.Experimental.Rendering.HDPipeline
             namedFragments.Add("${LOD}", materialOptions.lod.ToString());
 
             // process the template to generate the shader code for this pass   TODO: could make this a shared function
-            string[] templateLines = File.ReadAllLines(templateLocation);
-            System.Text.StringBuilder builder = new System.Text.StringBuilder();
-            foreach (string line in templateLines)
-            {
-                ShaderSpliceUtil.PreprocessShaderCode(line, activeFields, namedFragments, builder, debugOutput);
-            }
+            ShaderSpliceUtil.TemplatePreprocessor templatePreprocessor = new ShaderSpliceUtil.TemplatePreprocessor(activeFields, namedFragments, debugOutput);
 
-            result.AddShaderChunk(builder.ToString(), false);
+            templatePreprocessor.ProcessTemplateFile(templateLocation);
+
+            result.AddShaderChunk(templatePreprocessor.GetShaderCode().ToString(), false);
 
             return true;
         }

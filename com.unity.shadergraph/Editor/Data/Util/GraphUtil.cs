@@ -347,24 +347,6 @@ namespace UnityEditor.ShaderGraph
             result.AddGenerator(unpacker);
         }
 
-        // an easier to use version of substring Append() -- explicit inclusion on each end, and checks for positive length
-        private static void AppendSubstring(System.Text.StringBuilder target, string str, int start, bool includeStart, int end, bool includeEnd)
-        {
-            if (!includeStart)
-            {
-                start++;
-            }
-            if (!includeEnd)
-            {
-                end--;
-            }
-            int count = end - start + 1;
-            if (count > 0)
-            {
-                target.Append(str, start, count);
-            }
-        }
-
         // returns the offset of the first non-whitespace character, in the range [start, end] inclusive ... will return end if none found
         private static int SkipWhitespace(string str, int start, int end)
         {
@@ -382,169 +364,415 @@ namespace UnityEditor.ShaderGraph
             return index;
         }
 
-        public static System.Text.StringBuilder PreprocessShaderCode(string code, HashSet<string> activeFields, Dictionary<string, string> namedFragments, System.Text.StringBuilder result, bool debugOutput)
+        public class TemplatePreprocessor
         {
-            if (result == null)
+            // inputs
+            HashSet<string> activeFields;
+            Dictionary<string, string> namedFragments;
+            bool debugOutput;
+
+            // intermediates
+            HashSet<string> includedFiles;
+
+            // outputs
+            System.Text.StringBuilder result;
+
+            public TemplatePreprocessor(HashSet<string> activeFields, Dictionary<string, string> namedFragments, bool debugOutput, System.Text.StringBuilder outShaderCodeResult = null)
             {
-                result = new System.Text.StringBuilder();
+                this.activeFields = activeFields;
+                this.namedFragments = namedFragments;
+                this.debugOutput = debugOutput;
+                this.result = outShaderCodeResult;
+                if (this.result == null)
+                {
+                    this.result = new System.Text.StringBuilder();
+                }
+                includedFiles = new HashSet<string>();
+            }
+            public System.Text.StringBuilder GetShaderCode()
+            {
+                return result;
             }
 
-            int cur = 0;
-            int end = code.Length;
-            bool skipEndln = false;
-
-            while (cur < end)
+            public void ProcessTemplateFile(string filePath)
             {
-                int dollar = code.IndexOf('$', cur);
-                if (dollar < 0)
+                if (File.Exists(filePath) &&
+                    !includedFiles.Contains(filePath))
                 {
-                    // no escape sequence found -- just append the remaining part of the code verbatim
-                    AppendSubstring(result, code, cur, true, end, false);
-                    cur = end;
-                }
-                else
-                {
-                    // found $ escape sequence
+                    includedFiles.Add(filePath);
 
-                    // find the end of the line (or if none found, the end of the code)
-                    int endln = code.IndexOf('\n', dollar + 1);
-                    if (endln < 0)
+                    string[] templateLines = File.ReadAllLines(filePath);
+                    foreach (string line in templateLines)
                     {
-                        endln = end;
+                        ProcessTemplateCode(line);
+                    }
+                }
+            }
+
+            private int ParseEscapeCode(string code, int dollar, int endln, int cur)
+            {
+                // see if the character after '$' is '{', which would indicate a named fragment splice
+                if ((dollar + 1 < endln) && (code[dollar + 1] == '{'))
+                {
+                    // named fragment splice
+                    // search for the '}' within the current line
+                    int curlystart = dollar + 1;
+                    int curlyend = -1;
+                    if (endln > curlystart + 1)
+                    {
+                        curlyend = code.IndexOf('}', curlystart + 1, endln - curlystart - 1);
                     }
 
-                    // see if the character after '$' is '{', which would indicate a named fragment splice
-                    if ((dollar + 1 < endln) && (code[dollar + 1] == '{'))
+                    int nameLength = curlyend - dollar + 1;
+                    if ((curlyend < 0) || (nameLength <= 0))
                     {
-                        // named fragment splice
-                        // search for the '}' within the current line
-                        int curlystart = dollar + 1;
-                        int curlyend = -1;
-                        if (endln > curlystart + 1)
+                        // no } found, or zero length name                            
+
+                        // append everything before the beginning of the escape sequence
+                        AppendSubstring(code, cur, true, dollar, false);
+
+                        if (curlyend < 0)
                         {
-                            curlyend = code.IndexOf('}', curlystart + 1, endln - curlystart - 1);
-                        }
-
-                        int nameLength = curlyend - dollar + 1;
-                        if ((curlyend < 0) || (nameLength <= 0))
-                        {
-                            // no } found, or zero length name                            
-
-                            // append everything before the beginning of the escape sequence
-                            AppendSubstring(result, code, cur, true, dollar, false);
-
-                            if (curlyend < 0)
-                            {
-                                result.Append("// ERROR: unterminated escape sequence ('${' and '}' must be matched)\n");
-                            }
-                            else
-                            {
-                                result.Append("// ERROR: name '${}' is empty\n");
-                            }
-
-                            // append the line (commented out) for context
-                            result.Append("//    ");
-                            AppendSubstring(result, code, dollar, true, endln, false);
-                            result.Append("\n");
+                            result.Append("// ERROR: unterminated escape sequence ('${' and '}' must be matched)\n");
                         }
                         else
                         {
-                            // } found!
-                            // ugh, this probably allocates memory -- wish we could do the name lookup direct from a substring
-                            string name = code.Substring(dollar, nameLength);
-
-                            // append everything before the beginning of the escape sequence
-                            AppendSubstring(result, code, cur, true, dollar, false);
-
-                            string fragment;
-                            if ((namedFragments != null) && namedFragments.TryGetValue(name, out fragment))
-                            {
-                                // splice the fragment
-                                result.Append(fragment);
-                                // advance to just after the '}'
-                                cur = curlyend + 1;
-                            }
-                            else
-                            {
-                                // no named fragment found
-                                result.AppendFormat("/* Could not find named fragment '{0}' */", name);
-                                cur = curlyend + 1;
-                            }
+                            result.Append("// ERROR: name '${}' is empty\n");
                         }
+
+                        // append the line (commented out) for context
+                        result.Append("//    ");
+                        AppendSubstring(code, dollar, true, endln, false);
+                        result.Append("\n");
                     }
                     else
                     {
-                        // it's a predicate
-                        // search for the colon within the current line
-                        int colon = -1;
-                        if (endln > dollar + 1)
+                        // } found!
+                        // ugh, this probably allocates memory -- wish we could do the name lookup direct from a substring
+                        string name = code.Substring(dollar, nameLength);
+
+                        // append everything before the beginning of the escape sequence
+                        AppendSubstring(code, cur, true, dollar, false);
+
+                        string fragment;
+                        if ((namedFragments != null) && namedFragments.TryGetValue(name, out fragment))
                         {
-                            colon = code.IndexOf(':', dollar + 1, endln - dollar - 1);
-                        }
-
-                        int predicateLength = colon - dollar - 1;
-                        if ((colon < 0) || (predicateLength <= 0))
-                        {
-                            // no colon found... error!  Spit out error and context
-
-                            // append everything before the beginning of the escape sequence
-                            AppendSubstring(result, code, cur, true, dollar, false);
-
-                            if (colon < 0)
-                            {
-                                result.Append("// ERROR: unterminated escape sequence ('$' and ':' must be matched)\n");
-                            }
-                            else
-                            {
-                                result.Append("// ERROR: predicate is zero length\n");
-                            }
-
-                            // append the line (commented out) for context
-                            result.Append("//    ");
-                            AppendSubstring(result, code, dollar, true, endln, false);
+                            // splice the fragment
+                            result.Append(fragment);
+                            // advance to just after the '}'
+                            cur = curlyend + 1;
                         }
                         else
                         {
-                            // colon found!
-                            // ugh, this probably allocates memory -- wish we could do the field lookup direct from a substring
-                            string predicate = code.Substring(dollar + 1, predicateLength);
-                            int nonwhitespace = SkipWhitespace(code, colon + 1, endln);
-                            if (activeFields.Contains(predicate))
+                            // no named fragment found
+                            result.AppendFormat("/* Could not find named fragment '{0}' */", name);
+                            cur = curlyend + 1;
+                        }
+                    }
+                }
+                else
+                {
+                    // find parens
+                    int lparen = -1;
+                    int rparen = -1;
+                    if (endln > dollar + 1)
+                    {
+                        lparen = code.IndexOf('(', dollar + 1, endln - dollar - 1);
+                        if ((lparen >= 0) && (endln > lparen + 1))
+                        {
+                            rparen = code.IndexOf(')', lparen + 1, endln - lparen - 1);
+                        }
+                    }
+                    if (rparen < 0)
+                    {
+                    }
+
+                    // it's a predicate
+                    // search for the colon within the current line
+                    int colon = -1;
+                    if (endln > dollar + 1)
+                    {
+                        colon = code.IndexOf(':', dollar + 1, endln - dollar - 1);
+                    }
+
+                    int predicateLength = colon - dollar - 1;
+                    if ((colon < 0) || (predicateLength <= 0))
+                    {
+                        // no colon found... error!  Spit out error and context
+
+                        // append everything before the beginning of the escape sequence
+                        AppendSubstring(code, cur, true, dollar, false);
+
+                        if (colon < 0)
+                        {
+                            result.Append("// ERROR: unterminated escape sequence ('$' and ':' must be matched)\n");
+                        }
+                        else
+                        {
+                            result.Append("// ERROR: predicate is zero length\n");
+                        }
+
+                        // append the line (commented out) for context
+                        result.Append("//    ");
+                        AppendSubstring(code, dollar, true, endln, false);
+                    }
+                    else
+                    {
+                        // colon found!
+                        // ugh, this probably allocates memory -- wish we could do the field lookup direct from a substring
+                        string predicate = code.Substring(dollar + 1, predicateLength);
+                        int nonwhitespace = SkipWhitespace(code, colon + 1, endln);
+                        if (activeFields.Contains(predicate))
+                        {
+                            // append everything before the beginning of the escape sequence
+                            AppendSubstring(code, cur, true, dollar, false);
+
+                            // predicate is active, append the line
+                            AppendSubstring(code, nonwhitespace, true, endln, false);
+                        }
+                        else
+                        {
+                            // predicate is not active
+                            if (debugOutput)
                             {
                                 // append everything before the beginning of the escape sequence
-                                AppendSubstring(result, code, cur, true, dollar, false);
-
-                                // predicate is active, append the line
-                                AppendSubstring(result, code, nonwhitespace, true, endln, false);
+                                AppendSubstring(code, cur, true, dollar, false);
+                                result.Append("// ");
+                                AppendSubstring(code, nonwhitespace, true, endln, false);
                             }
                             else
                             {
-                                // predicate is not active
-                                if (debugOutput)
-                                {
-                                    // append everything before the beginning of the escape sequence
-                                    AppendSubstring(result, code, cur, true, dollar, false);
-                                    result.Append("// ");
-                                    AppendSubstring(result, code, nonwhitespace, true, endln, false);
-                                }
-                                else
-                                {
-                                    skipEndln = true;
-                                }
+                                skipEndln = true;
                             }
                         }
-                        cur = endln + 1;
                     }
+                    cur = endln + 1;
+                }
+
+                return cur;
+            }
+
+            public void ProcessTemplateCode(string code)
+            {
+                int cur = 0;
+                int end = code.Length;
+                bool skipEndln = false;
+
+                while (cur < end)
+                {
+                    // find the line
+                    int endln = code.IndexOf('\n', cur);
+                    
+                    // find our escape code
+                    int dollar = code.IndexOf('$', cur);
+                    if (dollar < 0)
+                    {
+                        // no escape sequence found -- just append the remaining part of the code verbatim
+                        AppendSubstring(code, cur, true, end, false);
+                        result.AppendLine();
+                        cur = end;
+                    }
+                    else
+                    {
+                        // found $ escape sequence
+                        // find the end of the line (or if none found, the end of the code)
+                        int endln = code.IndexOf('\n', dollar + 1);
+                        if (endln < 0)
+                        {
+                            endln = end;
+                        }
+
+                        cur = ParseEscapeCode(code, dollar, endln, cur);
+                    }
+                }
+                if (!skipEndln)
+                {
+                    result.AppendLine();
                 }
             }
 
-            if (!skipEndln)
+            // an easier to use version of substring Append() -- explicit inclusion on each end, and checks for positive length
+            private void AppendSubstring(string str, int start, bool includeStart, int end, bool includeEnd)
             {
-                result.AppendLine();
+                if (!includeStart)
+                {
+                    start++;
+                }
+                if (!includeEnd)
+                {
+                    end--;
+                }
+                int count = end - start + 1;
+                if (count > 0)
+                {
+                    result.Append(str, start, count);
+                }
             }
-
-            return result;
         }
+
+        //         public static System.Text.StringBuilder PreprocessShaderCode(string code, HashSet<string> activeFields, Dictionary<string, string> namedFragments, System.Text.StringBuilder result, bool debugOutput)
+        //         {
+        //             if (result == null)
+        //             {
+        //                 result = new System.Text.StringBuilder();
+        //             }
+        // 
+        //             int cur = 0;
+        //             int end = code.Length;
+        //             bool skipEndln = false;
+        // 
+        //             while (cur < end)
+        //             {
+        //                 int dollar = code.IndexOf('$', cur);
+        //                 if (dollar < 0)
+        //                 {
+        //                     // no escape sequence found -- just append the remaining part of the code verbatim
+        //                     AppendSubstring(result, code, cur, true, end, false);
+        //                     cur = end;
+        //                 }
+        //                 else
+        //                 {
+        //                     // found $ escape sequence
+        // 
+        //                     // find the end of the line (or if none found, the end of the code)
+        //                     int endln = code.IndexOf('\n', dollar + 1);
+        //                     if (endln < 0)
+        //                     {
+        //                         endln = end;
+        //                     }
+        // 
+        //                     // see if the character after '$' is '{', which would indicate a named fragment splice
+        //                     if ((dollar + 1 < endln) && (code[dollar + 1] == '{'))
+        //                     {
+        //                         // named fragment splice
+        //                         // search for the '}' within the current line
+        //                         int curlystart = dollar + 1;
+        //                         int curlyend = -1;
+        //                         if (endln > curlystart + 1)
+        //                         {
+        //                             curlyend = code.IndexOf('}', curlystart + 1, endln - curlystart - 1);
+        //                         }
+        // 
+        //                         int nameLength = curlyend - dollar + 1;
+        //                         if ((curlyend < 0) || (nameLength <= 0))
+        //                         {
+        //                             // no } found, or zero length name                            
+        // 
+        //                             // append everything before the beginning of the escape sequence
+        //                             AppendSubstring(result, code, cur, true, dollar, false);
+        // 
+        //                             if (curlyend < 0)
+        //                             {
+        //                                 result.Append("// ERROR: unterminated escape sequence ('${' and '}' must be matched)\n");
+        //                             }
+        //                             else
+        //                             {
+        //                                 result.Append("// ERROR: name '${}' is empty\n");
+        //                             }
+        // 
+        //                             // append the line (commented out) for context
+        //                             result.Append("//    ");
+        //                             AppendSubstring(result, code, dollar, true, endln, false);
+        //                             result.Append("\n");
+        //                         }
+        //                         else
+        //                         {
+        //                             // } found!
+        //                             // ugh, this probably allocates memory -- wish we could do the name lookup direct from a substring
+        //                             string name = code.Substring(dollar, nameLength);
+        // 
+        //                             // append everything before the beginning of the escape sequence
+        //                             AppendSubstring(result, code, cur, true, dollar, false);
+        // 
+        //                             string fragment;
+        //                             if ((namedFragments != null) && namedFragments.TryGetValue(name, out fragment))
+        //                             {
+        //                                 // splice the fragment
+        //                                 result.Append(fragment);
+        //                                 // advance to just after the '}'
+        //                                 cur = curlyend + 1;
+        //                             }
+        //                             else
+        //                             {
+        //                                 // no named fragment found
+        //                                 result.AppendFormat("/* Could not find named fragment '{0}' */", name);
+        //                                 cur = curlyend + 1;
+        //                             }
+        //                         }
+        //                     }
+        //                     else
+        //                     {
+        //                         // it's a predicate
+        //                         // search for the colon within the current line
+        //                         int colon = -1;
+        //                         if (endln > dollar + 1)
+        //                         {
+        //                             colon = code.IndexOf(':', dollar + 1, endln - dollar - 1);
+        //                         }
+        // 
+        //                         int predicateLength = colon - dollar - 1;
+        //                         if ((colon < 0) || (predicateLength <= 0))
+        //                         {
+        //                             // no colon found... error!  Spit out error and context
+        // 
+        //                             // append everything before the beginning of the escape sequence
+        //                             AppendSubstring(result, code, cur, true, dollar, false);
+        // 
+        //                             if (colon < 0)
+        //                             {
+        //                                 result.Append("// ERROR: unterminated escape sequence ('$' and ':' must be matched)\n");
+        //                             }
+        //                             else
+        //                             {
+        //                                 result.Append("// ERROR: predicate is zero length\n");
+        //                             }
+        // 
+        //                             // append the line (commented out) for context
+        //                             result.Append("//    ");
+        //                             AppendSubstring(result, code, dollar, true, endln, false);
+        //                         }
+        //                         else
+        //                         {
+        //                             // colon found!
+        //                             // ugh, this probably allocates memory -- wish we could do the field lookup direct from a substring
+        //                             string predicate = code.Substring(dollar + 1, predicateLength);
+        //                             int nonwhitespace = SkipWhitespace(code, colon + 1, endln);
+        //                             if (activeFields.Contains(predicate))
+        //                             {
+        //                                 // append everything before the beginning of the escape sequence
+        //                                 AppendSubstring(result, code, cur, true, dollar, false);
+        // 
+        //                                 // predicate is active, append the line
+        //                                 AppendSubstring(result, code, nonwhitespace, true, endln, false);
+        //                             }
+        //                             else
+        //                             {
+        //                                 // predicate is not active
+        //                                 if (debugOutput)
+        //                                 {
+        //                                     // append everything before the beginning of the escape sequence
+        //                                     AppendSubstring(result, code, cur, true, dollar, false);
+        //                                     result.Append("// ");
+        //                                     AppendSubstring(result, code, nonwhitespace, true, endln, false);
+        //                                 }
+        //                                 else
+        //                                 {
+        //                                     skipEndln = true;
+        //                                 }
+        //                             }
+        //                         }
+        //                         cur = endln + 1;
+        //                     }
+        //                 }
+        //             }
+        // 
+        //             if (!skipEndln)
+        //             {
+        //                 result.AppendLine();
+        //             }
+        // 
+        //             return result;
+        //         }
 
         public static void ApplyDependencies(HashSet<string> activeFields, List<Dependency[]> dependsList)
         {
