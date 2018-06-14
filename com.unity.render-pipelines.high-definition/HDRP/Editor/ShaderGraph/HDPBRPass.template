@@ -18,7 +18,7 @@ Pass
     //-------------------------------------------------------------------------------------
 
     HLSLPROGRAM
-    
+
         #pragma target 4.5
         #pragma only_renderers d3d11 ps4 xboxone vulkan metal switch
         //#pragma enable_d3d11_debug_symbols
@@ -249,10 +249,10 @@ $include("SharedCode.template.hlsl")
 
         builtinData.opacity =                   surfaceDescription.Alpha;
         builtinData.bakeDiffuseLighting =       SampleBakedGI(fragInputs.positionWS, bentNormalWS, fragInputs.texCoord1, fragInputs.texCoord2);    // see GetBuiltinData()
-     
+
         // It is safe to call this function here as surfaceData have been filled
         // We want to know if we must enable transmission on GI for SSS material, if the material have no SSS, this code will be remove by the compiler.
-        BSDFData bsdfData = ConvertSurfaceDataToBSDFData(surfaceData);
+        BSDFData bsdfData = ConvertSurfaceDataToBSDFData(posInput.positionSS.xy, surfaceData);
         if (HasFeatureFlag(bsdfData.materialFeatures, MATERIALFEATUREFLAGS_LIT_TRANSMISSION))
         {
             // For now simply recall the function with inverted normal, the compiler should be able to optimize the lightmap case to not resample the directional lightmap

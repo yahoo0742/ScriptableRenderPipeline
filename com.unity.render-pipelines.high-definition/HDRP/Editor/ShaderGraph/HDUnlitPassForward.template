@@ -18,7 +18,7 @@ Pass
     //-------------------------------------------------------------------------------------
 
     HLSLPROGRAM
-    
+
         #pragma target 4.5
         #pragma only_renderers d3d11 ps4 xboxone vulkan metal switch
         //#pragma enable_d3d11_debug_symbols
@@ -173,7 +173,7 @@ $include("SharedCode.template.hlsl")
 
         builtinData.opacity =                   surfaceDescription.Alpha;
         builtinData.bakeDiffuseLighting =       float3(0.0, 0.0, 0.0);
-     
+
 $SurfaceDescription.Emission:     builtinData.emissiveColor =             surfaceDescription.Emission;
         builtinData.velocity =                  float2(0.0, 0.0);
         builtinData.shadowMask0 = 0.0;

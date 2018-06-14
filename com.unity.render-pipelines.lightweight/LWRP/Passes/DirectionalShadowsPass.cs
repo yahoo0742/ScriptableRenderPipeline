@@ -16,7 +16,6 @@ namespace UnityEngine.Experimental.Rendering.LightweightPipeline
         ShadowSliceData[] m_CascadeSlices;
         Vector4[] m_CascadeSplitDistances;
 
-        const string k_SetupRenderTargetTag = "Setup Render Target";
         const string k_RenderDirectionalShadowmapTag = "Render Directional Shadowmap";
 
         public DirectionalShadowsPass(LightweightForwardRenderer renderer) : base(renderer)
@@ -93,7 +92,7 @@ namespace UnityEngine.Experimental.Rendering.LightweightPipeline
                 return;
 
             CommandBuffer cmd = CommandBufferPool.Get(k_RenderDirectionalShadowmapTag);
-            using (new ProfilingSample(cmd, k_SetupRenderTargetTag))
+            using (new ProfilingSample(cmd, k_RenderDirectionalShadowmapTag))
             {
                 m_ShadowCasterCascadesCount = shadowData.directionalLightCascadeCount;
 
@@ -125,13 +124,7 @@ namespace UnityEngine.Experimental.Rendering.LightweightPipeline
                 if (success)
                 {
                     shadowQuality = (shadowData.supportsSoftShadows) ? light.shadows : LightShadows.Hard;
-
-                    // In order to avoid shader variants explosion we only do hard shadows when sampling shadowmap in the lit pass.
-                    // GLES2 platform is forced to hard single cascade shadows.
-                    if (!shadowData.requiresScreenSpaceShadowResolve)
-                        shadowQuality = LightShadows.Hard;
-
-                    SetupDirectionalShadowReceiverConstants(ref context, cmd, ref shadowData, shadowLight);
+                    SetupDirectionalShadowReceiverConstants(cmd, ref shadowData, shadowLight);
                 }
             }
             context.ExecuteCommandBuffer(cmd);
@@ -141,7 +134,7 @@ namespace UnityEngine.Experimental.Rendering.LightweightPipeline
             shadowData.renderedDirectionalShadowQuality = shadowQuality;
         }
 
-        void SetupDirectionalShadowReceiverConstants(ref ScriptableRenderContext context, CommandBuffer cmd, ref ShadowData shadowData, VisibleLight shadowLight)
+        void SetupDirectionalShadowReceiverConstants(CommandBuffer cmd, ref ShadowData shadowData, VisibleLight shadowLight)
         {
             Light light = shadowLight.light;
 

@@ -62,6 +62,7 @@
             $SurfaceDescriptionInputs.uv2:                       output.uv2 =                         float4(input.texCoord2, 0.0f, 0.0f);
             $SurfaceDescriptionInputs.uv3:                       output.uv3 =                         float4(input.texCoord3, 0.0f, 0.0f);
             $SurfaceDescriptionInputs.VertexColor:               output.VertexColor =                 input.color;
+            $SurfaceDescriptionInputs.FaceSign:                  output.FaceSign =                    input.isFrontFace;
 
             return output;
         }
