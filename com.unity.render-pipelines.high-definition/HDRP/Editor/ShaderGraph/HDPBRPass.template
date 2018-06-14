@@ -132,7 +132,9 @@ $splice(Defines)
     //-------------------------------------------------------------------------------------
     // Interpolator Packing And Struct Declarations
     //-------------------------------------------------------------------------------------
-$splice(InterpolatorPacking)
+        $buildType(AttributesMesh)
+        $buildType(VaryingsMeshToPS)
+        $buildType(VaryingsMeshToDS)
     //-------------------------------------------------------------------------------------
     // End Interpolator Packing And Struct Declarations
     //-------------------------------------------------------------------------------------
@@ -145,7 +147,7 @@ $splice(Graph)
     // End graph generated code
     //-------------------------------------------------------------------------------------
 
-$include("VertexAnimation.template.hlsl")
+$features.modifyMesh:   $include("VertexAnimation.template.hlsl")
 
 $include("SharedCode.template.hlsl")
 

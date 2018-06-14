@@ -28,6 +28,14 @@ namespace UnityEditor.ShaderGraph
         }
     };
 
+    [System.AttributeUsage(System.AttributeTargets.Struct)]
+    public class InterpolatorPack : System.Attribute
+    {
+        public InterpolatorPack()
+        {
+        }
+    }
+
     // attribute used to flag a field as needing an HLSL semantic applied
     // i.e.    float3 position : POSITION;
     //                           ^ semantic
@@ -221,6 +229,12 @@ namespace UnityEditor.ShaderGraph
             }
             result.Deindent();
             result.AddShaderChunk("};");
+
+            object[] packAttributes = t.GetCustomAttributes(typeof(InterpolatorPack), false);
+            if (packAttributes.Length > 0)
+            {
+                BuildPackedType(t, activeFields, result);
+            }
         }
 
         public static void BuildPackedType(System.Type unpacked, HashSet<string> activeFields, ShaderGenerator result)
@@ -371,6 +385,7 @@ namespace UnityEditor.ShaderGraph
             Dictionary<string, string> namedFragments;
             string templatePath;
             bool debugOutput;
+            string buildTypeAssemblyNameFormat;
 
             // intermediates
             HashSet<string> includedFiles;
@@ -379,13 +394,14 @@ namespace UnityEditor.ShaderGraph
             System.Text.StringBuilder result;
             List<string> sourceAssetDependencyPaths;
 
-            public TemplatePreprocessor(HashSet<string> activeFields, Dictionary<string, string> namedFragments, bool debugOutput, string templatePath, List<string> sourceAssetDependencyPaths, System.Text.StringBuilder outShaderCodeResult = null)
+            public TemplatePreprocessor(HashSet<string> activeFields, Dictionary<string, string> namedFragments, bool debugOutput, string templatePath, List<string> sourceAssetDependencyPaths, string buildTypeAssemblyNameFormat, System.Text.StringBuilder outShaderCodeResult = null)
             {
                 this.activeFields = activeFields;
                 this.namedFragments = namedFragments;
                 this.debugOutput = debugOutput;
                 this.templatePath = templatePath;
                 this.sourceAssetDependencyPaths = sourceAssetDependencyPaths;
+                this.buildTypeAssemblyNameFormat = buildTypeAssemblyNameFormat;
                 this.result = outShaderCodeResult;
                 if (this.result == null)
                 {
@@ -484,76 +500,21 @@ namespace UnityEditor.ShaderGraph
                         {
                             if (command.Is("include"))
                             {
-                                if (Expect(line, command.end, '('))
-                                {
-                                    Token param = ParseString(line, command.end+1, end);
-
-                                    if (!param.IsValid())
-                                    {
-                                        Error("ERROR: $include expected a string file path parameter", line, command.end + 1);
-                                        break;
-                                    }
-                                    else
-                                    {
-                                        var includeLocation = Path.Combine(templatePath, param.GetString());
-                                        if (!File.Exists(includeLocation))
-                                        {
-                                            Error("ERROR: $include cannot find file : " + includeLocation, line, param.start);
-                                            break;
-                                        }
-
-                                        // skip a line, just to be sure we've cleaned up the current line
-                                        result.AppendLine();
-                                        result.AppendLine("//-------------------------------------------------------------------------------------");
-                                        result.AppendLine("// TEMPLATE INCLUDE : " + param.GetString());
-                                        result.AppendLine("//-------------------------------------------------------------------------------------");
-                                        ProcessTemplateFile(includeLocation);
-                                        result.AppendLine();
-                                        result.AppendLine("//-------------------------------------------------------------------------------------");
-                                        result.AppendLine("// END TEMPLATE INCLUDE : " + param.GetString());
-                                        result.AppendLine("//-------------------------------------------------------------------------------------");
-                                    }
-
-                                    break;
-                                }
+                                ProcessIncludeCommand(command, end);                                
+                                break;      // include command always ignores the rest of the line, error or not
                             }
                             else if (command.Is("splice"))
                             {
-                                if (!Expect(line, command.end, '('))
+                                if (!ProcessSpliceCommand(command, end, ref cur))
                                 {
+                                    // error, skip the rest of the line
                                     break;
                                 }
-                                else
-                                {
-                                    Token param = ParseUntil(line, command.end + 1, end, ')');
-                                    if (!param.IsValid())
-                                    {
-                                        Error("ERROR: splice command is missing a ')'", line, command.start);
-                                        break;
-                                    }
-                                    else
-                                    {
-                                        // append everything before the beginning of the escape sequence
-                                        AppendSubstring(line, cur, true, dollar, false);
-
-                                        // find the named fragment
-                                        string name = param.GetString();     // unfortunately this allocates a new string
-                                        string fragment;
-                                        if ((namedFragments != null) && namedFragments.TryGetValue(name, out fragment))
-                                        {
-                                            // splice the fragment
-                                            result.Append(fragment);
-                                        }
-                                        else
-                                        {
-                                            // no named fragment found
-                                            result.AppendFormat("/* WARNING: $splice Could not find named fragment '{0}' */", name);
-                                        }
-
-                                        // advance to just after the ')' and continue parsing
-                                        cur = param.end + 1;
-                                    }
-                                }
+                            }
+                            else if (command.Is("buildType"))
+                            {
+                                ProcessBuildTypeCommand(command, end);
+                                break;      // buildType command always ignores the rest of the line, error or not
                             }
                             else
                             {
@@ -566,36 +527,9 @@ namespace UnityEditor.ShaderGraph
                                 }
                                 else
                                 {
-                                    // eval if(param)
-                                    string fieldName = predicate.GetString();
-                                    int nonwhitespace = SkipWhitespace(line, predicate.end + 1, end);
-                                    if (activeFields.Contains(fieldName))
+                                    if (!ProcessPredicate(predicate, end, ref cur, ref appendEndln))
                                     {
-                                        // predicate is active
-                                        // append everything before the beginning of the escape sequence
-                                        AppendSubstring(line, cur, true, dollar, false);
-
-                                        // append the rest of the line, starting with nonwhitespace
-                                        AppendSubstring(line, nonwhitespace, true, end, false);
-                                        break;
-                                    }
-                                    else
-                                    {
-                                        // predicate is not active
-                                        if (debugOutput)
-                                        {
-                                            // append everything before the beginning of the escape sequence
-                                            AppendSubstring(line, cur, true, dollar, false);
-                                            // append the rest of the line, commented out
-                                            result.Append("// ");
-                                            AppendSubstring(line, nonwhitespace, true, end, false);
-                                        }
-                                        else
-                                        {
-                                            // don't append anything
-                                            appendEndln = false;
-                                        }
-                                        break;
+                                        break;  // skip the rest of the line
                                     }
                                 }
                             }
@@ -606,6 +540,144 @@ namespace UnityEditor.ShaderGraph
                 if (appendEndln)
                 {
                     result.AppendLine();
+                }
+            }
+
+            private void ProcessIncludeCommand(Token includeCommand, int lineEnd)
+            {
+                if (Expect(includeCommand.s, includeCommand.end, '('))
+                {
+                    Token param = ParseString(includeCommand.s, includeCommand.end + 1, lineEnd);
+
+                    if (!param.IsValid())
+                    {
+                        Error("ERROR: $include expected a string file path parameter", includeCommand.s, includeCommand.end + 1);
+                    }
+                    else
+                    {
+                        var includeLocation = Path.Combine(templatePath, param.GetString());
+                        if (!File.Exists(includeLocation))
+                        {
+                            Error("ERROR: $include cannot find file : " + includeLocation, includeCommand.s, param.start);
+                        }
+                        else
+                        {
+                            // skip a line, just to be sure we've cleaned up the current line
+                            result.AppendLine();
+                            result.AppendLine("//-------------------------------------------------------------------------------------");
+                            result.AppendLine("// TEMPLATE INCLUDE : " + param.GetString());
+                            result.AppendLine("//-------------------------------------------------------------------------------------");
+                            ProcessTemplateFile(includeLocation);
+                            result.AppendLine();
+                            result.AppendLine("//-------------------------------------------------------------------------------------");
+                            result.AppendLine("// END TEMPLATE INCLUDE : " + param.GetString());
+                            result.AppendLine("//-------------------------------------------------------------------------------------");
+                        }
+                    }
+                }
+            }
+
+            private bool ProcessSpliceCommand(Token spliceCommand, int lineEnd, ref int cur)
+            {
+                if (!Expect(spliceCommand.s, spliceCommand.end, '('))
+                {
+                    return false;
+                }
+                else
+                {
+                    Token param = ParseUntil(spliceCommand.s, spliceCommand.end + 1, lineEnd, ')');
+                    if (!param.IsValid())
+                    {
+                        Error("ERROR: splice command is missing a ')'", spliceCommand.s, spliceCommand.start);
+                        return false;
+                    }
+                    else
+                    {
+                        // append everything before the beginning of the escape sequence
+                        AppendSubstring(spliceCommand.s, cur, true, spliceCommand.start-1, false);
+
+                        // find the named fragment
+                        string name = param.GetString();     // unfortunately this allocates a new string
+                        string fragment;
+                        if ((namedFragments != null) && namedFragments.TryGetValue(name, out fragment))
+                        {
+                            // splice the fragment
+                            result.Append(fragment);
+                        }
+                        else
+                        {
+                            // no named fragment found
+                            result.AppendFormat("/* WARNING: $splice Could not find named fragment '{0}' */", name);
+                        }
+
+                        // advance to just after the ')' and continue parsing
+                        cur = param.end + 1;
+                    }
+                }
+                return true;
+            }
+
+            private void ProcessBuildTypeCommand(Token command, int endLine)
+            {
+                if (Expect(command.s, command.end, '('))
+                {
+                    Token param = ParseUntil(command.s, command.end + 1, endLine, ')');
+                    if (!param.IsValid())
+                    {
+                        Error("ERROR: buildType command is missing a ')'", command.s, command.start);
+                    }
+                    else
+                    {
+                        string typeName = param.GetString();
+                        string assemblyQualifiedTypeName = string.Format(buildTypeAssemblyNameFormat, typeName);
+                        Type type = Type.GetType(assemblyQualifiedTypeName);
+                        if (type == null)
+                        {
+                            Error("ERROR: buildType could not find type : " + typeName, command.s, param.start);
+                        }
+                        else
+                        {
+                            result.AppendLine("// Generated Type: " + typeName);
+                            ShaderGenerator temp = new ShaderGenerator();
+                            BuildType(type, activeFields, temp);
+                            result.AppendLine(temp.GetShaderString(0, false));
+                        }
+                    }
+                }
+            }
+
+            private bool ProcessPredicate(Token predicate, int endLine, ref int cur, ref bool appendEndln)
+            {
+                // eval if(param)
+                string fieldName = predicate.GetString();
+                int nonwhitespace = SkipWhitespace(predicate.s, predicate.end + 1, endLine);
+                if (activeFields.Contains(fieldName))
+                {
+                    // predicate is active
+                    // append everything before the beginning of the escape sequence
+                    AppendSubstring(predicate.s, cur, true, predicate.start-1, false);
+
+                    // continue parsing the rest of the line, starting with the first nonwhitespace character
+                    cur = nonwhitespace;
+                    return true;
+                }
+                else
+                {
+                    // predicate is not active
+                    if (debugOutput)
+                    {
+                        // append everything before the beginning of the escape sequence
+                        AppendSubstring(predicate.s, cur, true, predicate.start-1, false);
+                        // append the rest of the line, commented out
+                        result.Append("// ");
+                        AppendSubstring(predicate.s, nonwhitespace, true, endLine, false);
+                    }
+                    else
+                    {
+                        // don't append anything
+                        appendEndln = false;
+                    }
+                    return false;
                 }
             }
 
