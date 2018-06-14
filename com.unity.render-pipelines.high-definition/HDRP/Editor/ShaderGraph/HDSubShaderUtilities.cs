@@ -491,7 +491,8 @@ namespace UnityEditor.Experimental.Rendering.HDPipeline
     {
         public static bool GenerateShaderPass(AbstractMaterialNode masterNode, Pass pass, GenerationMode mode, SurfaceMaterialOptions materialOptions, HashSet<string> activeFields, ShaderGenerator result, List<string> sourceAssetDependencyPaths)
         {
-            var templateLocation = Path.Combine(Path.Combine(Path.Combine(HDEditorUtils.GetHDRenderPipelinePath(), "Editor"), "ShaderGraph"), pass.TemplateName);
+            string templatePath = Path.Combine(Path.Combine(HDEditorUtils.GetHDRenderPipelinePath(), "Editor"), "ShaderGraph");
+            string templateLocation = Path.Combine(templatePath, pass.TemplateName);
             if (!File.Exists(templateLocation))
             {
                 // TODO: produce error here
@@ -499,9 +500,6 @@ namespace UnityEditor.Experimental.Rendering.HDPipeline
             }
 
             bool debugOutput = false;
-
-            if (sourceAssetDependencyPaths != null)
-                sourceAssetDependencyPaths.Add(templateLocation);
 
             // grab all of the active nodes (for pixel and vertex graphs)
             var vertexNodes = ListPool<INode>.Get();
@@ -684,22 +682,23 @@ namespace UnityEditor.Experimental.Rendering.HDPipeline
 
             // build the hash table of all named fragments      TODO: could make this Dictionary<string, ShaderGenerator / string>  ?
             Dictionary<string, string> namedFragments = new Dictionary<string, string>();
-            namedFragments.Add("${Defines}", defines.GetShaderString(2, false));
-            namedFragments.Add("${Graph}", graph.GetShaderString(2, false));
-            namedFragments.Add("${LightMode}", pass.LightMode);
-            namedFragments.Add("${PassName}", pass.Name);
-            namedFragments.Add("${Includes}", shaderPassIncludes.GetShaderString(2, false));
-            namedFragments.Add("${InterpolatorPacking}", packedInterpolatorCode.GetShaderString(2, false));
-            namedFragments.Add("${Blending}", blendCode.ToString());
-            namedFragments.Add("${Culling}", cullCode.ToString());
-            namedFragments.Add("${ZTest}", zTestCode.ToString());
-            namedFragments.Add("${ZWrite}", zWriteCode.ToString());
-            namedFragments.Add("${Stencil}", stencilCode.ToString());
-            namedFragments.Add("${ColorMask}", colorMaskCode.ToString());
-            namedFragments.Add("${LOD}", materialOptions.lod.ToString());
+            namedFragments.Add("Defines", defines.GetShaderString(2, false));
+            namedFragments.Add("Graph", graph.GetShaderString(2, false));
+            namedFragments.Add("LightMode", pass.LightMode);
+            namedFragments.Add("PassName", pass.Name);
+            namedFragments.Add("Includes", shaderPassIncludes.GetShaderString(2, false));
+            namedFragments.Add("InterpolatorPacking", packedInterpolatorCode.GetShaderString(2, false));
+            namedFragments.Add("Blending", blendCode.ToString());
+            namedFragments.Add("Culling", cullCode.ToString());
+            namedFragments.Add("ZTest", zTestCode.ToString());
+            namedFragments.Add("ZWrite", zWriteCode.ToString());
+            namedFragments.Add("Stencil", stencilCode.ToString());
+            namedFragments.Add("ColorMask", colorMaskCode.ToString());
+            namedFragments.Add("LOD", materialOptions.lod.ToString());
 
             // process the template to generate the shader code for this pass   TODO: could make this a shared function
-            ShaderSpliceUtil.TemplatePreprocessor templatePreprocessor = new ShaderSpliceUtil.TemplatePreprocessor(activeFields, namedFragments, debugOutput);
+            ShaderSpliceUtil.TemplatePreprocessor templatePreprocessor =
+                new ShaderSpliceUtil.TemplatePreprocessor(activeFields, namedFragments, debugOutput, templatePath, sourceAssetDependencyPaths);
 
             templatePreprocessor.ProcessTemplateFile(templateLocation);
 
