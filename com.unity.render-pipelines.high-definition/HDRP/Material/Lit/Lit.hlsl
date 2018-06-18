@@ -128,6 +128,8 @@ static const uint kFeatureVariantFlags[NUM_FEATURE_VARIANTS] =
 #define MATERIAL_FEATURE_FLAGS_SSS_OUTPUT_SPLIT_LIGHTING         ((MATERIAL_FEATURE_MASK_FLAGS + 1) << 0)
 #define MATERIAL_FEATURE_FLAGS_SSS_TEXTURING_MODE_OFFSET FastLog2((MATERIAL_FEATURE_MASK_FLAGS + 1) << 1) // 2 bits
 #define MATERIAL_FEATURE_FLAGS_TRANSMISSION_MODE_MIXED_THICKNESS ((MATERIAL_FEATURE_MASK_FLAGS + 1) << 3)
+// Flags used as a shortcut to know if we have thin mode transmission
+#define MATERIAL_FEATURE_FLAGS_TRANSMISSION_MODE_THIN_THICKNESS  ((MATERIAL_FEATURE_MASK_FLAGS + 1) << 4)
 
 uint FeatureFlagsToTileVariant(uint featureFlags)
 {
@@ -221,7 +223,7 @@ void FillMaterialTransmission(uint diffusionProfile, float thickness, inout BSDF
     // the current object. That's not a problem, since large thickness will result in low intensity.
     bool useThinObjectMode = IsBitSet(asuint(_TransmissionFlags), diffusionProfile);
 
-    bsdfData.materialFeatures |= useThinObjectMode ? 0 : MATERIAL_FEATURE_FLAGS_TRANSMISSION_MODE_MIXED_THICKNESS;
+    bsdfData.materialFeatures |= useThinObjectMode ? MATERIAL_FEATURE_FLAGS_TRANSMISSION_MODE_THIN_THICKNESS : MATERIAL_FEATURE_FLAGS_TRANSMISSION_MODE_MIXED_THICKNESS;
 
     // Compute transmittance using baked thickness here. It may be overridden for direct lighting
     // in the auto-thickness mode (but is always be used for indirect lighting).
@@ -1255,6 +1257,16 @@ DirectLighting EvaluateBSDF_Directional(LightLoopContext lightLoopContext,
 
     float3 color;
     float attenuation;
+
+    // When using thin transmission mode we don't fetch shadow map for back face, we reuse front face shadow
+    // However we flip the normal for the bias (and the NdotL test) and disable contact shadow
+    if (HasFeatureFlag(bsdfData.materialFeatures, MATERIAL_FEATURE_FLAGS_TRANSMISSION_MODE_THIN_THICKNESS) && NdotL < 0)
+    {
+        //  Disable shadow contact in case of transmission and backface shadow
+        N = -N;
+        lightData.contactShadowIndex = -1; // This is only modify for the scope of this function
+    }
+
     EvaluateLight_Directional(lightLoopContext, posInput, lightData, bakeLightingData, N, L, color, attenuation);
 
     float intensity = max(0, attenuation * NdotL); // Warning: attenuation can be greater than 1 due to the inverse square attenuation (when position is close to light)
@@ -1269,9 +1281,7 @@ DirectLighting EvaluateBSDF_Directional(LightLoopContext lightLoopContext,
     }
 
     // The mixed thickness mode is not supported by directional lights due to poor quality and high performance impact.
-    bool mixedThicknessMode = HasFeatureFlag(bsdfData.materialFeatures, MATERIAL_FEATURE_FLAGS_TRANSMISSION_MODE_MIXED_THICKNESS);
-
-    if (HasFeatureFlag(bsdfData.materialFeatures, MATERIALFEATUREFLAGS_LIT_TRANSMISSION) && !mixedThicknessMode)
+    if (HasFeatureFlag(bsdfData.materialFeatures, MATERIAL_FEATURE_FLAGS_TRANSMISSION_MODE_THIN_THICKNESS))
     {
         // We use diffuse lighting for accumulation since it is going to be blurred during the SSS pass.
         lighting.diffuse += EvaluateTransmission(bsdfData, bsdfData.transmittance, NdotL, NdotV, LdotV, attenuation * lightData.diffuseScale);
@@ -1331,25 +1341,20 @@ DirectLighting EvaluateBSDF_Punctual(LightLoopContext lightLoopContext,
     float  NdotL = dot(N, L);
     float  LdotV = dot(L, V);
 
-    bool mixedThicknessMode = HasFeatureFlag(bsdfData.materialFeatures, MATERIAL_FEATURE_FLAGS_TRANSMISSION_MODE_MIXED_THICKNESS)
-                              && NdotL < 0 && lightData.shadowIndex >= 0;
-
-    // Save the original version for the transmission code below.
-    int originalShadowIndex = lightData.shadowIndex;
-
-    if (mixedThicknessMode)
-    {
-        // Make sure we do not sample the shadow map twice.
-        lightData.shadowIndex = -1;
-    }
-
     float3 color;
     float attenuation;
+
+    // When using thin transmission mode we don't fetch shadow map for back face, we reuse front face shadow
+    // However we flip the normal for the bias (and the NdotL test) and disable contact shadow
+    if (HasFeatureFlag(bsdfData.materialFeatures, MATERIAL_FEATURE_FLAGS_TRANSMISSION_MODE_THIN_THICKNESS) && NdotL < 0)
+    {
+        //  Disable shadow contact in case of transmission and backface shadow
+        N = -N;
+        lightData.contactShadowIndex = -1; // This is only modify for the scope of this function
+    }
+
     EvaluateLight_Punctual(lightLoopContext, posInput, lightData, bakeLightingData, N, L,
                            lightToSample, distances, color, attenuation);
-
-    // Restore the original shadow index.
-    lightData.shadowIndex = originalShadowIndex;
 
     float intensity = max(0, attenuation * NdotL); // Warning: attenuation can be greater than 1 due to the inverse square attenuation (when position is close to light)
 
@@ -1372,6 +1377,11 @@ DirectLighting EvaluateBSDF_Punctual(LightLoopContext lightLoopContext,
     if (HasFeatureFlag(bsdfData.materialFeatures, MATERIALFEATUREFLAGS_LIT_TRANSMISSION))
     {
         float3 transmittance = bsdfData.transmittance;
+
+        // Note that if NdotL is positive, we have one fetch on front face done by EvaluateLight_Punctual, otherwise we have only one fetch
+        // done by transmission code here (EvaluateLight_Punctual discard the fetch if NdotL < 0)
+        bool mixedThicknessMode =   HasFeatureFlag(bsdfData.materialFeatures, MATERIAL_FEATURE_FLAGS_TRANSMISSION_MODE_MIXED_THICKNESS)
+                                    && NdotL < 0 && lightData.shadowIndex >= 0;
 
         if (mixedThicknessMode)
         {
@@ -1763,7 +1773,7 @@ IndirectLighting EvaluateBSDF_SSLighting(LightLoopContext lightLoopContext,
     float3 rayOriginWS              = float3(0, 0, 0);
     float3 rayDirWS                 = float3(0, 0, 0);
     float mipLevel                  = 0;
-#if DEBUG_DISPLAY
+#ifdef DEBUG_DISPLAY
     int debugMode                   = 0;
 #endif
     float invScreenWeightDistance   = 0;
@@ -1783,7 +1793,7 @@ IndirectLighting EvaluateBSDF_SSLighting(LightLoopContext lightLoopContext,
         rayDirWS                = preLightData.transparentRefractV;
         mipLevel                = preLightData.transparentSSMipLevel;
         invScreenWeightDistance = _SSRefractionInvScreenWeightDistance;
-#if DEBUG_DISPLAY
+#ifdef DEBUG_DISPLAY
         debugMode               = DEBUGLIGHTINGMODE_SCREEN_SPACE_TRACING_REFRACTION;
 #endif
     }
@@ -1795,12 +1805,12 @@ IndirectLighting EvaluateBSDF_SSLighting(LightLoopContext lightLoopContext,
         rayDirWS                = preLightData.iblR;
         mipLevel                = PositivePow(preLightData.iblPerceptualRoughness, 0.8) * uint(max(_ColorPyramidScale.z - 1, 0));
         invScreenWeightDistance = _SSReflectionInvScreenWeightDistance;
-#if DEBUG_DISPLAY
+#ifdef DEBUG_DISPLAY
         debugMode               = DEBUGLIGHTINGMODE_SCREEN_SPACE_TRACING_REFLECTION;
 #endif
     }
 
-#if DEBUG_DISPLAY
+#ifdef DEBUG_DISPLAY
             bool debug              = _DebugLightingMode == debugMode
                 && !any(int2(_MouseClickPixelCoord.xy) - int2(posInput.positionSS));
 #endif
@@ -1848,7 +1858,7 @@ IndirectLighting EvaluateBSDF_SSLighting(LightLoopContext lightLoopContext,
         // Jitter the ray origin to trade some noise instead of banding effect
         ssRayInput.rayOriginWS = rayOriginWS + rayDirWS * SampleBayer4(posInput.positionSS + uint2(_FrameCount, uint(_FrameCount) / 4u)) * 0.1;
         ssRayInput.rayDirWS = rayDirWS;
-#if DEBUG_DISPLAY
+#ifdef DEBUG_DISPLAY
         ssRayInput.debug = debug;
 #endif
 
@@ -2069,12 +2079,14 @@ IndirectLighting EvaluateBSDF_Env(  LightLoopContext lightLoopContext,
     float iblMipLevel;
     // TODO: We need to match the PerceptualRoughnessToMipmapLevel formula for planar, so we don't do this test (which is specific to our current lightloop)
     // Specific case for Texture2Ds, their convolution is a gaussian one and not a GGX one - So we use another roughness mip mapping.
+#if !defined(SHADER_API_METAL)
     if (IsEnvIndexTexture2D(lightData.envIndex))
     {
         // Empirical remapping
         iblMipLevel = PositivePow(preLightData.iblPerceptualRoughness, 0.8) * uint(max(_ColorPyramidScale.z - 1, 0));
     }
     else
+#endif
     {
         iblMipLevel = PerceptualRoughnessToMipmapLevel(preLightData.iblPerceptualRoughness);
     }
