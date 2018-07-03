@@ -183,7 +183,7 @@ namespace UnityEditor.Experimental.Rendering.HDPipeline
         {
             base.FindBaseMaterialProperties(props);
 
-            doubleSidedNormalMode = FindProperty(kDoubleSidedNormalMode, props);
+            doubleSidedNormalMode = FindProperty(kDoubleSidedNormalMode, props, false);
             depthOffsetEnable = FindProperty(kDepthOffsetEnable, props);
 
             // MaterialID
@@ -244,7 +244,7 @@ namespace UnityEditor.Experimental.Rendering.HDPipeline
             EditorGUI.showMixedValue = false;
         }
 
-        protected abstract void UpdateDisplacement();
+        protected virtual void UpdateDisplacement() {}
 
         protected override void BaseMaterialPropertiesGUI()
         {
@@ -253,7 +253,7 @@ namespace UnityEditor.Experimental.Rendering.HDPipeline
             EditorGUI.indentLevel++;
 
             // This follow double sided option
-            if (doubleSidedEnable.floatValue > 0.0f)
+            if (doubleSidedEnable != null && doubleSidedEnable.floatValue > 0.0f)
             {
                 EditorGUI.indentLevel++;
                 m_MaterialEditor.ShaderProperty(doubleSidedNormalMode, StylesBaseLit.doubleSidedNormalModeText);
@@ -368,7 +368,7 @@ namespace UnityEditor.Experimental.Rendering.HDPipeline
         {
             SetupBaseUnlitKeywords(material);
 
-            bool doubleSidedEnable = material.GetFloat(kDoubleSidedEnable) > 0.0f;
+            bool doubleSidedEnable = material.HasProperty(kDoubleSidedEnable) ? material.GetFloat(kDoubleSidedEnable) > 0.0f : false;
 
             if (doubleSidedEnable)
             {
