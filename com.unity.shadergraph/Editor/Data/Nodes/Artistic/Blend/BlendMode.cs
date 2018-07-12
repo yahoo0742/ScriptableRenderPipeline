@@ -18,11 +18,11 @@ namespace UnityEditor.ShaderGraph
         Multiply,
         Negation,
         Overlay,
-        Overwrite,
         PinLight,
         Screen,
         SoftLight,
         Subtract,
-        VividLight
+        VividLight,
+        Overwrite
     }
 }
