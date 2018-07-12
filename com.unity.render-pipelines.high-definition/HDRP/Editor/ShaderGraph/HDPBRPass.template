@@ -78,7 +78,7 @@ $splice(Defines)
         $AttributesMesh.uv2:                    #define ATTRIBUTES_NEED_TEXCOORD2
         $AttributesMesh.uv3:                    #define ATTRIBUTES_NEED_TEXCOORD3
         $AttributesMesh.color:                  #define ATTRIBUTES_NEED_COLOR
-        $VaryingsMeshToPS.positionWS:           #define VARYINGS_NEED_POSITION_WS
+        $VaryingsMeshToPS.positionRWS:          #define VARYINGS_NEED_POSITION_WS
         $VaryingsMeshToPS.normalWS:             #define VARYINGS_NEED_TANGENT_TO_WORLD
         $VaryingsMeshToPS.texCoord0:            #define VARYINGS_NEED_TEXCOORD0
         $VaryingsMeshToPS.texCoord1:            #define VARYINGS_NEED_TEXCOORD1
@@ -250,24 +250,24 @@ $include("SharedCode.template.hlsl")
         float3 bentNormalWS =                   surfaceData.normalWS;           // TODO : make bent normals work
 
         builtinData.opacity =                   surfaceDescription.Alpha;
-        builtinData.bakeDiffuseLighting =       SampleBakedGI(fragInputs.positionWS, bentNormalWS, fragInputs.texCoord1, fragInputs.texCoord2);    // see GetBuiltinData()
+        builtinData.bakeDiffuseLighting =       SampleBakedGI(fragInputs.positionRWS, bentNormalWS, fragInputs.texCoord1, fragInputs.texCoord2);    // see GetBuiltinData()
 
         // It is safe to call this function here as surfaceData have been filled
         // We want to know if we must enable transmission on GI for SSS material, if the material have no SSS, this code will be remove by the compiler.
         BSDFData bsdfData = ConvertSurfaceDataToBSDFData(posInput.positionSS.xy, surfaceData);
-        if (HasFeatureFlag(bsdfData.materialFeatures, MATERIALFEATUREFLAGS_LIT_TRANSMISSION))
+        if (HasFlag(bsdfData.materialFeatures, MATERIALFEATUREFLAGS_LIT_TRANSMISSION))
         {
             // For now simply recall the function with inverted normal, the compiler should be able to optimize the lightmap case to not resample the directional lightmap
             // however it will not optimize the lightprobe case due to the proxy volume relying on dynamic if (we rely must get right of this dynamic if), not a problem for SH9, but a problem for proxy volume.
             // TODO: optimize more this code.
             // Add GI transmission contribution by resampling the GI for inverted vertex normal
-            builtinData.bakeDiffuseLighting += SampleBakedGI(fragInputs.positionWS, -fragInputs.worldToTangent[2], fragInputs.texCoord1, fragInputs.texCoord2) * bsdfData.transmittance;
+            builtinData.bakeDiffuseLighting += SampleBakedGI(fragInputs.positionRWS, -fragInputs.worldToTangent[2], fragInputs.texCoord1, fragInputs.texCoord2) * bsdfData.transmittance;
         }
 
 $SurfaceDescription.Emission:     builtinData.emissiveColor =             surfaceDescription.Emission;
         builtinData.velocity =                  float2(0.0, 0.0);
 #ifdef SHADOWS_SHADOWMASK
-        float4 shadowMask = SampleShadowMask(fragInputs.positionWS, fragInputs.texCoord1);
+        float4 shadowMask = SampleShadowMask(fragInputs.positionRWS, fragInputs.texCoord1);
         builtinData.shadowMask0 = shadowMask.x;
         builtinData.shadowMask1 = shadowMask.y;
         builtinData.shadowMask2 = shadowMask.z;

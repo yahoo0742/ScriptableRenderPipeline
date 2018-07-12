@@ -25,7 +25,7 @@ namespace UnityEditor.Experimental.Rendering.HDPipeline
         internal struct VaryingsMeshToPS
         {
             [Semantic("SV_Position")]           Vector4 positionCS;
-            [Optional]                          Vector3 positionWS;
+            [Optional]                          Vector3 positionRWS;
             [Optional]                          Vector3 normalWS;
             [Optional]                          Vector4 tangentWS;      // w contain mirror sign
             [Optional]                          Vector2 texCoord0;
@@ -38,7 +38,7 @@ namespace UnityEditor.Experimental.Rendering.HDPipeline
 
             public static Dependency[] tessellationDependencies = new Dependency[]
             {
-                new Dependency("VaryingsMeshToPS.positionWS",       "VaryingsMeshToDS.positionWS"),
+                new Dependency("VaryingsMeshToPS.positionRWS",       "VaryingsMeshToDS.positionRWS"),
                 new Dependency("VaryingsMeshToPS.normalWS",         "VaryingsMeshToDS.normalWS"),
                 new Dependency("VaryingsMeshToPS.tangentWS",        "VaryingsMeshToDS.tangentWS"),
                 new Dependency("VaryingsMeshToPS.texCoord0",        "VaryingsMeshToDS.texCoord0"),
@@ -50,7 +50,7 @@ namespace UnityEditor.Experimental.Rendering.HDPipeline
 
             public static Dependency[] standardDependencies = new Dependency[]
             {
-                new Dependency("VaryingsMeshToPS.positionWS",       "AttributesMesh.positionOS"),
+                new Dependency("VaryingsMeshToPS.positionRWS",       "AttributesMesh.positionOS"),
                 new Dependency("VaryingsMeshToPS.normalWS",         "AttributesMesh.normalOS"),
                 new Dependency("VaryingsMeshToPS.tangentWS",        "AttributesMesh.tangentOS"),
                 new Dependency("VaryingsMeshToPS.texCoord0",        "AttributesMesh.uv0"),
@@ -64,7 +64,7 @@ namespace UnityEditor.Experimental.Rendering.HDPipeline
         [InterpolatorPack]
         internal struct VaryingsMeshToDS
         {
-            Vector3 positionWS;
+            Vector3 positionRWS;
             Vector3 normalWS;
             [Optional]      Vector4 tangentWS;
             [Optional]      Vector2 texCoord0;
@@ -88,7 +88,7 @@ namespace UnityEditor.Experimental.Rendering.HDPipeline
         {
             public static Dependency[] dependencies = new Dependency[]
             {
-                new Dependency("FragInputs.positionWS",         "VaryingsMeshToPS.positionWS"),
+                new Dependency("FragInputs.positionRWS",        "VaryingsMeshToPS.positionRWS"),
                 new Dependency("FragInputs.worldToTangent",     "VaryingsMeshToPS.tangentWS"),
                 new Dependency("FragInputs.worldToTangent",     "VaryingsMeshToPS.normalWS"),
                 new Dependency("FragInputs.texCoord0",          "VaryingsMeshToPS.texCoord0"),
@@ -150,11 +150,11 @@ namespace UnityEditor.Experimental.Rendering.HDPipeline
                 new Dependency("SurfaceDescriptionInputs.ObjectSpaceBiTangent",      "SurfaceDescriptionInputs.WorldSpaceBiTangent"),
                 new Dependency("SurfaceDescriptionInputs.ViewSpaceBiTangent",        "SurfaceDescriptionInputs.WorldSpaceBiTangent"),
 
-                new Dependency("SurfaceDescriptionInputs.WorldSpacePosition",        "FragInputs.positionWS"),
-                new Dependency("SurfaceDescriptionInputs.ObjectSpacePosition",       "FragInputs.positionWS"),
-                new Dependency("SurfaceDescriptionInputs.ViewSpacePosition",         "FragInputs.positionWS"),
+                new Dependency("SurfaceDescriptionInputs.WorldSpacePosition",        "FragInputs.positionRWS"),
+                new Dependency("SurfaceDescriptionInputs.ObjectSpacePosition",       "FragInputs.positionRWS"),
+                new Dependency("SurfaceDescriptionInputs.ViewSpacePosition",         "FragInputs.positionRWS"),
 
-                new Dependency("SurfaceDescriptionInputs.WorldSpaceViewDirection",   "FragInputs.positionWS"),                   // we build WorldSpaceViewDirection using FragInputs.positionWS in GetWorldSpaceNormalizeViewDir()
+                new Dependency("SurfaceDescriptionInputs.WorldSpaceViewDirection",   "FragInputs.positionRWS"),                   // we build WorldSpaceViewDirection using FragInputs.positionRWS in GetWorldSpaceNormalizeViewDir()
                 new Dependency("SurfaceDescriptionInputs.ObjectSpaceViewDirection",  "SurfaceDescriptionInputs.WorldSpaceViewDirection"),
                 new Dependency("SurfaceDescriptionInputs.ViewSpaceViewDirection",    "SurfaceDescriptionInputs.WorldSpaceViewDirection"),
                 new Dependency("SurfaceDescriptionInputs.TangentSpaceViewDirection", "SurfaceDescriptionInputs.WorldSpaceViewDirection"),
