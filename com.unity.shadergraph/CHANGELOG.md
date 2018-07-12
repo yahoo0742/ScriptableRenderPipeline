@@ -92,3 +92,4 @@ You can now see the generated code for any specific node. To do so, right-click 
 - When you rename a shader graph or sub shader graph locally on your disk, the title of the Shader Graph window, black board, and preview also updates.
 - Added Overwrite blend mode to `Blend` node.
 - Unrolled loop in `Simple Noise` node.
+- `Polygon` node now calculates radius based on apothem.
