@@ -70,6 +70,11 @@ This adds a new node for LOD functionality on a Texture 2D Sample. Sample Textur
 
 You can now see the generated code for any specific node. To do so, right-click the node, and select Show Generated Code. The code snippet will now open in the code editor that you have linked to Unity.
 
+### Rotate About Axis node
+
+![](.data/rotate_about_axis_node.png)
+
+This adds a new node which rotates a 3D vector space about an axis by a specified number of degrees or radians. This allows users to rotate vertices, normals, etc.
 
 ### Bug fixes and minor changes
 
