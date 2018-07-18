@@ -40,7 +40,6 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
         public bool         supportMSAA = false;
         public MSAASamples  msaaSampleCount = MSAASamples.None;
         public bool         supportMotionVectors = true;
-        public bool         supportStereo = false;
 
         public GlobalLightLoopSettings  lightLoopSettings = new GlobalLightLoopSettings();
         public ShadowInitParameters     shadowInitParams = new ShadowInitParameters();

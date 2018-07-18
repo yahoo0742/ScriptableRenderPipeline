@@ -18,6 +18,13 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
         }
 
         [SerializeField]
+        XRGraphicsConfig m_XRConfig;
+        public XRGraphicsConfig renderPipelineXRConfig
+        {
+            get { return m_XRConfig;  }
+        }
+
+        [SerializeField]
         RenderPipelineResources m_RenderPipelineResources;
         public RenderPipelineResources renderPipelineResources
         {

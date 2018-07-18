@@ -27,10 +27,16 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
             RenderTextureFormat[] rtFormat;
             bool[] sRGBFlags;
             m_DeferredMaterial.GetMaterialGBufferDescription(out rtFormat, out sRGBFlags);
-
+            int slices = 1;
+            VRTextureUsage vrUsage = VRTextureUsage.None;
+            if (XRGraphicsConfig.enabled)
+            {
+                slices = (XRGraphicsConfig.eyeTextureDesc.dimension == TextureDimension.Tex2DArray) ? 2 : 1; // FIXME double-check that this works as expected
+                vrUsage = XRGraphicsConfig.eyeTextureDesc.vrUsage;
+            }
             for (int gbufferIndex = 0; gbufferIndex < m_GBufferCount; ++gbufferIndex)
             {
-                m_RTs[gbufferIndex] = RTHandles.Alloc(Vector2.one, colorFormat: rtFormat[gbufferIndex], sRGB: sRGBFlags[gbufferIndex], filterMode: FilterMode.Point, name: string.Format("GBuffer{0}", gbufferIndex));
+                m_RTs[gbufferIndex] = RTHandles.Alloc(Vector2.one, colorFormat: rtFormat[gbufferIndex], sRGB: sRGBFlags[gbufferIndex], filterMode: FilterMode.Point, name: string.Format("GBuffer{0}", gbufferIndex), slices : slices, vrUsage : vrUsage);
                 m_RTIDs[gbufferIndex] = m_RTs[gbufferIndex].nameID;
                 m_TextureShaderIDs[gbufferIndex] = HDShaderIDs._GBufferTexture[gbufferIndex];
                 m_RTIDsNoShadowMask[gbufferIndex] = HDShaderIDs._GBufferTexture[gbufferIndex];
@@ -38,7 +44,7 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
 
             if (m_SupportShadowMask)
             {
-                m_RTs[m_GBufferCount] = RTHandles.Alloc(Vector2.one, colorFormat: Builtin.GetShadowMaskBufferFormat(), sRGB: Builtin.GetShadowMaskSRGBFlag(), filterMode: FilterMode.Point, name: "GBufferShadowMask");
+                m_RTs[m_GBufferCount] = RTHandles.Alloc(Vector2.one, colorFormat: Builtin.GetShadowMaskBufferFormat(), sRGB: Builtin.GetShadowMaskSRGBFlag(), filterMode: FilterMode.Point, name: "GBufferShadowMask", slices : slices, vrUsage : vrUsage);
                 m_RTIDs[m_GBufferCount] = new RenderTargetIdentifier(m_RTs[m_GBufferCount]);
                 m_TextureShaderIDs[m_GBufferCount] = HDShaderIDs._ShadowMaskTexture;
             }

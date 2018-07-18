@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using UnityEngine.XR;
 
 namespace UnityEngine.Experimental.Rendering.HDPipeline
 {
@@ -141,13 +140,9 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
 
             // Planar and real time cubemap doesn't need post process and render in FP16
             aggregate.enablePostprocess = camera.cameraType != CameraType.Reflection && srcFrameSettings.enablePostprocess;
-
-#if UNITY_SWITCH
-            aggregate.enableStereo = false;
-#else
-            aggregate.enableStereo = camera.cameraType != CameraType.Reflection && srcFrameSettings.enableStereo && XRSettings.isDeviceActive && (camera.stereoTargetEye == StereoTargetEyeMask.Both) && renderPipelineSettings.supportStereo;
-#endif
-
+            
+            aggregate.enableStereo = (camera.cameraType != CameraType.Reflection) && (camera.cameraType != CameraType.SceneView) && XRGraphicsConfig.enabled && (camera.stereoTargetEye == StereoTargetEyeMask.Both);
+            
             aggregate.enableAsyncCompute = srcFrameSettings.enableAsyncCompute && SystemInfo.supportsAsyncCompute;
 
             aggregate.enableOpaqueObjects = srcFrameSettings.enableOpaqueObjects;
@@ -261,14 +256,6 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
                         new DebugUI.BoolField { displayName = "Enable Opaque Objects", getter = () => frameSettings.enableOpaqueObjects, setter = value => frameSettings.enableOpaqueObjects = value },
                         new DebugUI.BoolField { displayName = "Enable Transparent Objects", getter = () => frameSettings.enableTransparentObjects, setter = value => frameSettings.enableTransparentObjects = value },
                         new DebugUI.BoolField { displayName = "Enable MSAA", getter = () => frameSettings.enableMSAA, setter = value => frameSettings.enableMSAA = value },
-                    }
-                },
-                new DebugUI.Container
-                {
-                    displayName = "XR Settings",
-                    children =
-                    {
-                        new DebugUI.BoolField { displayName = "Enable Stereo Rendering", getter = () => frameSettings.enableStereo, setter = value => frameSettings.enableStereo = value }
                     }
                 },
                 new DebugUI.Container

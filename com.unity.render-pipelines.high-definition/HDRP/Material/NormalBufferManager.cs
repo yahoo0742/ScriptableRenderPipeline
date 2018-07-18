@@ -22,11 +22,18 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
 
         public void InitNormalBuffers(GBufferManager gbufferManager, RenderPipelineSettings settings)
         {
+            int slices = 1;
+            VRTextureUsage vrUsage = VRTextureUsage.None;
+            if (XRGraphicsConfig.enabled)
+            {
+                slices = (XRGraphicsConfig.eyeTextureDesc.dimension == TextureDimension.Tex2DArray) ? 2 : 1; // FIXME double-check that this works as expected
+                vrUsage = XRGraphicsConfig.eyeTextureDesc.vrUsage;
+            }
             if (settings.supportOnlyForward)
             {
                 // In case of full forward we must allocate the render target for normal buffer (or reuse one already existing)
                 // TODO: Provide a way to reuse a render target
-                m_ColorMRTs[0] = RTHandles.Alloc(Vector2.one, filterMode: FilterMode.Point, colorFormat: RenderTextureFormat.ARGB32, sRGB: false, name: "NormalBuffer");
+                m_ColorMRTs[0] = RTHandles.Alloc(Vector2.one, filterMode: FilterMode.Point, colorFormat: RenderTextureFormat.ARGB32, sRGB: false, name: "NormalBuffer", slices : slices, vrUsage : vrUsage);
                 m_ExternalBuffer[0] = false;
             }
             else

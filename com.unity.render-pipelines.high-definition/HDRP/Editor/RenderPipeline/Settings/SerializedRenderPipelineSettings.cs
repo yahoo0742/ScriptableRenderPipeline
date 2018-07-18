@@ -15,7 +15,6 @@ namespace UnityEditor.Experimental.Rendering
         public SerializedProperty supportSubsurfaceScattering;
         public SerializedProperty supportOnlyForward;
         public SerializedProperty supportMotionVectors;
-        public SerializedProperty supportStereo;
         [UnityEngine.Serialization.FormerlySerializedAs("enableUltraQualitySSS")]
         public SerializedProperty increaseSssSampleCount;
         [UnityEngine.Serialization.FormerlySerializedAs("supportVolumetric")]
@@ -41,7 +40,6 @@ namespace UnityEditor.Experimental.Rendering
             supportSubsurfaceScattering     = root.Find((RenderPipelineSettings s) => s.supportSubsurfaceScattering);
             supportOnlyForward              = root.Find((RenderPipelineSettings s) => s.supportOnlyForward);
             supportMotionVectors            = root.Find((RenderPipelineSettings s) => s.supportMotionVectors);
-            supportStereo                   = root.Find((RenderPipelineSettings s) => s.supportStereo);
             increaseSssSampleCount          = root.Find((RenderPipelineSettings s) => s.increaseSssSampleCount);
             supportVolumetrics              = root.Find((RenderPipelineSettings s) => s.supportVolumetrics);
             increaseResolutionOfVolumetrics = root.Find((RenderPipelineSettings s) => s.increaseResolutionOfVolumetrics);

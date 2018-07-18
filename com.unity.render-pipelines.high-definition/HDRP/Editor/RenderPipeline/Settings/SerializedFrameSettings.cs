@@ -67,7 +67,6 @@ namespace UnityEditor.Experimental.Rendering
             enableTransparentPostpass = root.Find((FrameSettings d) => d.enableTransparentPostpass);
             enableDistortion = root.Find((FrameSettings d) => d.enableDistortion);
             enablePostprocess = root.Find((FrameSettings d) => d.enablePostprocess);
-            enableStereo = root.Find((FrameSettings d) => d.enableStereo);
             enableAsyncCompute = root.Find((FrameSettings d) => d.enableAsyncCompute);
             enableOpaqueObjects = root.Find((FrameSettings d) => d.enableOpaqueObjects);
             enableTransparentObjects = root.Find((FrameSettings d) => d.enableTransparentObjects);

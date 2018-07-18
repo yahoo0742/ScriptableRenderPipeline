@@ -206,6 +206,19 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
             {
                 Debug.Assert(camera != null, "Missing HDCamera when setting up Render Target with auto-scale and Viewport.");
                 Vector2Int scaledViewportSize = target.GetScaledSize(new Vector2Int(camera.actualWidth, camera.actualHeight));
+                //float originX = 0.0f;
+                //if (camera.camera.stereoEnabled)
+                //{
+                //    Rect pixelRect = camera.camera.pixelRect;
+                //    Camera.MonoOrStereoscopicEye currentEye = camera.camera.stereoActiveEye;
+                //    if (currentEye == Camera.MonoOrStereoscopicEye.Left)
+                //        scaledViewportSize.x = Mathf.RoundToInt(scaledViewportSize.x / 2);
+                //    else if (currentEye == Camera.MonoOrStereoscopicEye.Right)
+                //        originX = Mathf.RoundToInt(scaledViewportSize.x / 2) + 1;
+
+                //    Rect viewportToSet = new Rect(originX, 0, scaledViewportSize.x, scaledViewportSize.y);
+                //}
+                //cmd.SetViewport(new Rect(originX, 0.0f, scaledViewportSize.x, scaledViewportSize.y));
                 cmd.SetViewport(new Rect(0.0f, 0.0f, scaledViewportSize.x, scaledViewportSize.y));
             }
         }
