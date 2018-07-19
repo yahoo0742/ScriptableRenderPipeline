@@ -322,7 +322,7 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
         // Stopgap method used to extract stereo combined matrix state.
         public void UpdateStereoDependentState(ref ScriptableCullingParameters cullingParams)
         {
-            if (!XRGraphicsConfig.enabled)
+            if (!m_frameSettings.enableStereo)
                 return;
 
             // What constants in UnityPerPass need updating for stereo considerations?

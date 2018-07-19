@@ -53,7 +53,7 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
             aggregate.enableFptlForForwardOpaque = aggregate.enableFptlForForwardOpaque && !aggregateFrameSettings.enableMSAA;
 
             // disable FPTL for stereo for now
-            aggregate.enableFptlForForwardOpaque = aggregate.enableFptlForForwardOpaque && !XRGraphicsConfig.enabled;
+            aggregate.enableFptlForForwardOpaque = aggregate.enableFptlForForwardOpaque && !aggregateFrameSettings.enableStereo;
 
             // If Deferred, enable Fptl. If we are forward renderer only and not using Fptl for forward opaque, disable Fptl
             aggregate.isFptlEnabled = !aggregateFrameSettings.enableForwardRenderingOnly || aggregate.enableFptlForForwardOpaque;
