@@ -916,7 +916,6 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
                         }
                     }
                     renderContext.SetupCameraProperties(camera, hdCamera.frameSettings.enableStereo);
-
                     PushGlobalParams(hdCamera, cmd, diffusionProfileSettings);
 
                     // TODO: Find a correct place to bind these material textures

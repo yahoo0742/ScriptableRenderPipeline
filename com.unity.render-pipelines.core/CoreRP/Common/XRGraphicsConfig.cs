@@ -1,6 +1,7 @@
 using System;
 using UnityEditor;
 using UnityEngine.Assertions;
+#if ENABLE_VR
 #if UNITY_2017_2_OR_NEWER
 using UnityEngine.XR;
 using XRSettings = UnityEngine.XR.XRSettings;
@@ -8,12 +9,25 @@ using XRSettings = UnityEngine.XR.XRSettings;
 using UnityEngine.VR;
 using XRSettings = UnityEngine.VR.VRSettings;
 #endif
+#endif
 
 namespace UnityEngine.Experimental.Rendering
 {
     [Serializable]
     public class XRGraphicsConfig
     { // XRGConfig stores the desired XR settings for a given SRP asset.
+
+        public static bool enabled
+        { // SRP should use this to safely determine whether XR is enabled at runtime.
+            get
+            {
+#if ENABLE_VR
+                return XRSettings.enabled;
+#else
+                return false;
+#endif
+            }
+        }
 
         public float renderScale;
         public float viewportScale;
@@ -72,18 +86,6 @@ namespace UnityEngine.Experimental.Rendering
             get { return PlayerSettings.virtualRealitySupported; }
         }
 #endif
-
-        public static bool enabled
-        { // SRP should use this to safely determine whether XR is enabled at runtime.
-            get
-            {
-#if ENABLE_VR
-                return XRSettings.enabled;
-#else
-                return false;
-#endif
-            }
-        }
 
         public static StereoRenderingPath stereoRenderingMode
         {

@@ -287,13 +287,12 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
             var screenHeight = m_ActualHeight;
             if (m_frameSettings.enableStereo)
             {
+                // FIXME: Is eyeTextureWidth/Height different from what you'd get from eye texture desc?
                 screenWidth = XRGraphicsConfig.eyeTextureWidth;
                 screenHeight = XRGraphicsConfig.eyeTextureHeight;
-
+                RenderTextureDescriptor xrDesc = XRGraphicsConfig.eyeTextureDesc;
                 m_ActualWidth = xrDesc.width;
                 m_ActualHeight = xrDesc.height;
-                screenWidth = m_ActualWidth; // FIXME does this change break anything?
-                screenHeight = m_ActualHeight; 
 
                 ConfigureStereoMatrices();
             }
