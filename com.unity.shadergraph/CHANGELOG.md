@@ -118,3 +118,4 @@ You can now see the generated code for any specific node. To do so, right-click 
 - Texture 2D Array and Texture 3D nodes can no longer be used in the vertex shader.
 - Shader graphs using alpha clip now generate correct depth and shadow passes.
 - `Normal Create` node has been renamed to `Normal From Texture`.
+- The preview of nodes now updates correctly.
