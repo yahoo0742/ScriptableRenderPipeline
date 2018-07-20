@@ -122,7 +122,7 @@ namespace UnityEngine.Experimental.Rendering.LightweightPipeline
 
             serializedObject.ApplyModifiedProperties();
         }
-        
+
         void OnEnable()
         {
             m_RenderScale = serializedObject.FindProperty("m_RenderScale");
@@ -181,7 +181,6 @@ namespace UnityEngine.Experimental.Rendering.LightweightPipeline
 
         void DrawGeneralSettings()
         {
-            //EditorGUILayout.LabelField(Styles.generalSettingsLabel, EditorStyles.boldLabel);
             generalSettingsFoldout = EditorGUILayout.Foldout(generalSettingsFoldout, Styles.generalSettingsLabel, true);
             if (generalSettingsFoldout)
             {
