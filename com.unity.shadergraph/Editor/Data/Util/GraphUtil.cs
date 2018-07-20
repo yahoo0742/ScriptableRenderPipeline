@@ -391,10 +391,10 @@ namespace UnityEditor.ShaderGraph
             HashSet<string> includedFiles;
 
             // outputs
-            System.Text.StringBuilder result;
+            ShaderStringBuilder result;
             List<string> sourceAssetDependencyPaths;
 
-            public TemplatePreprocessor(HashSet<string> activeFields, Dictionary<string, string> namedFragments, bool debugOutput, string templatePath, List<string> sourceAssetDependencyPaths, string buildTypeAssemblyNameFormat, System.Text.StringBuilder outShaderCodeResult = null)
+            public TemplatePreprocessor(HashSet<string> activeFields, Dictionary<string, string> namedFragments, bool debugOutput, string templatePath, List<string> sourceAssetDependencyPaths, string buildTypeAssemblyNameFormat, ShaderStringBuilder outShaderCodeResult = null)
             {
                 this.activeFields = activeFields;
                 this.namedFragments = namedFragments;
@@ -402,15 +402,11 @@ namespace UnityEditor.ShaderGraph
                 this.templatePath = templatePath;
                 this.sourceAssetDependencyPaths = sourceAssetDependencyPaths;
                 this.buildTypeAssemblyNameFormat = buildTypeAssemblyNameFormat;
-                this.result = outShaderCodeResult;
-                if (this.result == null)
-                {
-                    this.result = new System.Text.StringBuilder();
-                }
+                this.result = outShaderCodeResult ?? new ShaderStringBuilder();
                 includedFiles = new HashSet<string>();
             }
 
-            public System.Text.StringBuilder GetShaderCode()
+            public ShaderStringBuilder GetShaderCode()
             {
                 return result;
             }
@@ -539,7 +535,7 @@ namespace UnityEditor.ShaderGraph
 
                 if (appendEndln)
                 {
-                    result.AppendLine();
+                    result.AppendNewLine();
                 }
             }
 
@@ -563,12 +559,12 @@ namespace UnityEditor.ShaderGraph
                         else
                         {
                             // skip a line, just to be sure we've cleaned up the current line
-                            result.AppendLine();
+                            result.AppendNewLine();
                             result.AppendLine("//-------------------------------------------------------------------------------------");
                             result.AppendLine("// TEMPLATE INCLUDE : " + param.GetString());
                             result.AppendLine("//-------------------------------------------------------------------------------------");
                             ProcessTemplateFile(includeLocation);
-                            result.AppendLine();
+                            result.AppendNewLine();
                             result.AppendLine("//-------------------------------------------------------------------------------------");
                             result.AppendLine("// END TEMPLATE INCLUDE : " + param.GetString());
                             result.AppendLine("//-------------------------------------------------------------------------------------");
@@ -607,7 +603,7 @@ namespace UnityEditor.ShaderGraph
                         else
                         {
                             // no named fragment found
-                            result.AppendFormat("/* WARNING: $splice Could not find named fragment '{0}' */", name);
+                            result.Append("/* WARNING: $splice Could not find named fragment '{0}' */", name);
                         }
 
                         // advance to just after the ')' and continue parsing
@@ -744,7 +740,7 @@ namespace UnityEditor.ShaderGraph
 
                 // append the location marker, and error description
                 result.Append("// ");
-                result.Append(' ', location);
+                result.AppendSpaces(location);
                 result.Append("^ ");
                 result.Append(error);
                 result.Append("\n");
