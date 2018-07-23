@@ -45,7 +45,7 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
         {
             using (new ProfilingSample(builtinParams.commandBuffer, "Get hdri skybox intensity"))
             {
-                if (m_HdriSkyParams.updateHDRISkyIntensity)
+                if (true) //m_HdriSkyParams.updateHDRISkyIntensity)
                 {
                     m_IntegrateHDRISkyMaterial.SetTexture(HDShaderIDs._Cubemap, m_HdriSkyParams.hdriSky);
 
