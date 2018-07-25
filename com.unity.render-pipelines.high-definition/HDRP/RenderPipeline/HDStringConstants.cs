@@ -251,7 +251,7 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
         public static readonly int _CameraFilteringBuffer          = Shader.PropertyToID("_CameraFilteringTexture");
         public static readonly int _IrradianceSource               = Shader.PropertyToID("_IrradianceSource");
 
-        public static readonly int _EnableDBuffer = Shader.PropertyToID("_EnableDBuffer");
+        public static readonly int _EnableDecals = Shader.PropertyToID("_EnableDecals");
         public static readonly int _DecalAtlasResolution = Shader.PropertyToID("_DecalAtlasResolution");
 
         public static readonly int[] _GBufferTexture =
@@ -314,6 +314,7 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
 
         public static readonly int _VelocityTexture = Shader.PropertyToID("_VelocityTexture");
         public static readonly int _ShadowMaskTexture = Shader.PropertyToID("_ShadowMaskTexture");
+        public static readonly int _LightLayersTexture = Shader.PropertyToID("_LightLayersTexture");
         public static readonly int _DistortionTexture = Shader.PropertyToID("_DistortionTexture");
         public static readonly int _ColorPyramidTexture = Shader.PropertyToID("_ColorPyramidTexture");
         public static readonly int _DepthPyramidTexture = Shader.PropertyToID("_DepthPyramidTexture");
@@ -362,6 +363,7 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
         public static readonly int _ThicknessRemap = Shader.PropertyToID("_ThicknessRemap");
 
         public static readonly int _Cubemap = Shader.PropertyToID("_Cubemap");
+        public static readonly int _InvOmegaP = Shader.PropertyToID("_InvOmegaP");
         public static readonly int _SkyParam = Shader.PropertyToID("_SkyParam");
         public static readonly int _PixelCoordToViewDirWS = Shader.PropertyToID("_PixelCoordToViewDirWS");
 
@@ -397,6 +399,8 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
         public static readonly int _NumVisibleDensityVolumes       = Shader.PropertyToID("_NumVisibleDensityVolumes");
         public static readonly int _VolumeMaskAtlas                = Shader.PropertyToID("_VolumeMaskAtlas");
         public static readonly int _VolumeMaskDimensions           = Shader.PropertyToID("_VolumeMaskDimensions");
+        
+        public static readonly int _EnableLightLayers                = Shader.PropertyToID("_EnableLightLayers");
 
         // Preintegrated texture name
         public static readonly int _PreIntegratedFGD_GGXDisneyDiffuse = Shader.PropertyToID("_PreIntegratedFGD_GGXDisneyDiffuse");
