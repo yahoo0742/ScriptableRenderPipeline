@@ -1,9 +1,5 @@
 #ifndef UNITY_SCREENSPACELIGHTING_INCLUDED
-<<<<<<< HEAD
 #define UNITY_SCREENSPACELIGHTING_INCLUDED
-=======
- #define UNITY_SCREENSPACELIGHTING_INCLUDED
->>>>>>> HDRP/staging
 
 #include "HDRP/Lighting/ScreenSpaceLighting/ScreenSpaceLighting.cs.hlsl"
 #include "HDRP/Lighting/Reflection/VolumeProjection.hlsl"
