@@ -80,6 +80,11 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
 
         public float                debugExposure = 0.0f;
 
+        public bool                 showPunctualLight = true;
+        public bool                 showDirectionalLight = true;
+        public bool                 showAreaLight = true;
+        public bool                 showReflectionProbe = true;
+
         public LightLoop.TileClusterDebug tileClusterDebug = LightLoop.TileClusterDebug.None;
         public LightLoop.TileClusterCategoryDebug tileClusterDebugByCategory = LightLoop.TileClusterCategoryDebug.Punctual;
     }

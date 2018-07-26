@@ -37,7 +37,7 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
         public ComputeShader buildPerVoxelLightListShader;    // clustered
         public ComputeShader buildMaterialFlagsShader;
         public ComputeShader deferredComputeShader;
-        public ComputeShader deferredDirectionalShadowComputeShader;
+        public ComputeShader screenSpaceShadowComputeShader;
         public ComputeShader volumeVoxelizationCS;
         public ComputeShader volumetricLightingCS;
 
@@ -58,11 +58,14 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
         public Shader GGXConvolve;
         public Shader opaqueAtmosphericScattering;
         public Shader hdriSky;
+        public Shader integrateHdriSky;
         public Shader proceduralSky;
         public Shader skyboxCubemap;
+        public Shader gradientSky;
 
         // Material
-        public Shader preIntegratedFGD;
+        public Shader preIntegratedFGD_GGXDisneyDiffuse;
+        public Shader preIntegratedFGD_CharlieClothLambert;
 
         // Utilities / Core
         public ComputeShader encodeBC6HCS;

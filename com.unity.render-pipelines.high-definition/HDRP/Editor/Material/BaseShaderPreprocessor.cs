@@ -18,6 +18,11 @@ namespace UnityEditor.Experimental.Rendering.HDPipeline
         protected ShaderKeyword m_DebugDisplay;
         protected ShaderKeyword m_TileLighting;
         protected ShaderKeyword m_ClusterLighting;
+        protected ShaderKeyword m_LodFadeCrossFade;
+        protected ShaderKeyword m_DecalsOFF;
+        protected ShaderKeyword m_Decals3RT;
+        protected ShaderKeyword m_Decals4RT;
+        protected ShaderKeyword m_LightLayers;
 
         public BaseShaderPreprocessor()
         {
@@ -25,6 +30,11 @@ namespace UnityEditor.Experimental.Rendering.HDPipeline
             m_DebugDisplay = new ShaderKeyword("DEBUG_DISPLAY");
             m_TileLighting = new ShaderKeyword("USE_FPTL_LIGHTLIST");
             m_ClusterLighting = new ShaderKeyword("USE_CLUSTERED_LIGHTLIST");
+            m_LodFadeCrossFade = new ShaderKeyword("LOD_FADE_CROSSFADE");
+            m_DecalsOFF = new ShaderKeyword("DECALS_OFF");
+            m_Decals3RT = new ShaderKeyword("DECALS_3RT");
+            m_Decals4RT = new ShaderKeyword("DECALS_4RT");
+            m_LightLayers = new ShaderKeyword("LIGHT_LAYERS");
         }
 
         public virtual void AddStripperFuncs(Dictionary<string, VariantStrippingFunc> stripperFuncs) {}
@@ -69,6 +79,36 @@ namespace UnityEditor.Experimental.Rendering.HDPipeline
             // If we are in a release build, don't compile debug display variant
             // Also don't compile it if not requested by the render pipeline settings
             if ((/*!Debug.isDebugBuild || */ !hdrpAsset.renderPipelineSettings.supportRuntimeDebugDisplay) && inputData.shaderKeywordSet.IsEnabled(m_DebugDisplay))
+                return true;
+
+            if (inputData.shaderKeywordSet.IsEnabled(m_LodFadeCrossFade) && !hdrpAsset.renderPipelineSettings.supportDitheringCrossFade)
+                return true;
+
+            // Decal case
+
+            // If decal support, remove unused variant
+            if (hdrpAsset.renderPipelineSettings.supportDecals)
+            {
+                // Remove the no decal case
+                if (inputData.shaderKeywordSet.IsEnabled(m_DecalsOFF))
+                    return true;
+
+                // If decal but with 4RT remove 3RT variant and vice versa
+                if (inputData.shaderKeywordSet.IsEnabled(m_Decals3RT) && hdrpAsset.renderPipelineSettings.decalSettings.perChannelMask)
+                    return true;
+
+                if (inputData.shaderKeywordSet.IsEnabled(m_Decals4RT) && !hdrpAsset.renderPipelineSettings.decalSettings.perChannelMask)
+                    return true;
+            }
+            else
+            {
+                // If no decal support, remove decal variant
+                if (inputData.shaderKeywordSet.IsEnabled(m_Decals3RT) || inputData.shaderKeywordSet.IsEnabled(m_Decals4RT))
+                    return true;
+            }
+
+
+            if (inputData.shaderKeywordSet.IsEnabled(m_LightLayers) && !hdrpAsset.renderPipelineSettings.supportLightLayers)
                 return true;
 
             return false;

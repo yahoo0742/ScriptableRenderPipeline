@@ -191,11 +191,11 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
             debugScreenSpaceTracingProxyValues = debugScreenSpaceTracingProxyValueList.ToArray();
             debugScreenSpaceTracingLinearStrings = debugScreenSpaceTracingLinearStringsList.ToArray();
             debugScreenSpaceTracingLinearValues = debugScreenSpaceTracingLinearValueList.ToArray();
-            var litProjectionModels = Enum.GetNames(typeof(ScreenSpaceLighting.ProjectionModel))
+            var ssProjectionModels = Enum.GetNames(typeof(ScreenSpaceLighting.ProjectionModel))
                 .Select((t, i) => new { c = new GUIContent(t), v = i })
                 .Where(n => n.c.text != "None" && n.c.text != "Count");
-            debuggedAlgorithmStrings = litProjectionModels.Select(c => c.c).ToArray();
-            debuggedAlgorithmValues = litProjectionModels.Select(c => c.v).ToArray();
+            debuggedAlgorithmStrings = ssProjectionModels.Select(c => c.c).ToArray();
+            debuggedAlgorithmValues = ssProjectionModels.Select(c => c.v).ToArray();
         }
 
         public int GetDebugMaterialIndex()
@@ -223,6 +223,11 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
         public DebugMipMapMode GetDebugMipMapMode()
         {
             return mipMapDebugSettings.debugMipMapMode;
+        }
+
+        public ColorPickerDebugMode GetDebugColorPickerMode()
+        {
+            return colorPickerDebugSettings.colorPickerMode;
         }
 
         public bool IsDebugDisplayEnabled()
@@ -387,8 +392,8 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
         {
             m_DebugDisplayStatsItems = new DebugUI.Widget[]
             {
-                new DebugUI.Value { displayName = "Frame Rate", getter = () => 1f / Time.smoothDeltaTime, refreshRate = 1f / 30f },
-                new DebugUI.Value { displayName = "Frame Rate (ms)", getter = () => Time.smoothDeltaTime * 1000f, refreshRate = 1f / 30f }
+                new DebugUI.Value { displayName = "Frame Rate (fps)", getter = () => 1f / Time.smoothDeltaTime, refreshRate = 1f / 30f },
+                new DebugUI.Value { displayName = "Frame Time (ms)", getter = () => Time.smoothDeltaTime * 1000f, refreshRate = 1f / 30f }
             };
 
             var panel = DebugManager.instance.GetPanel(k_PanelDisplayStats, true);
@@ -608,6 +613,17 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
         public void RegisterLightingDebug()
         {
             var list = new List<DebugUI.Widget>();
+
+            list.Add(new DebugUI.Foldout
+            {
+                displayName = "Show Light By Type",
+                children = {
+                    new DebugUI.BoolField { displayName = "Show Directional Lights", getter = () => lightingDebugSettings.showDirectionalLight, setter = value => lightingDebugSettings.showDirectionalLight = value },
+                    new DebugUI.BoolField { displayName = "Show Punctual Lights", getter = () => lightingDebugSettings.showPunctualLight, setter = value => lightingDebugSettings.showPunctualLight = value },
+                    new DebugUI.BoolField { displayName = "Show Area Lights", getter = () => lightingDebugSettings.showAreaLight, setter = value => lightingDebugSettings.showAreaLight = value },
+                    new DebugUI.BoolField { displayName = "Show Reflection Probe", getter = () => lightingDebugSettings.showReflectionProbe, setter = value => lightingDebugSettings.showReflectionProbe = value },
+                }
+            });
 
             list.Add(new DebugUI.EnumField
             {

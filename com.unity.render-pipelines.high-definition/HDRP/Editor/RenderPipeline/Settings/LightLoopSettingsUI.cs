@@ -1,7 +1,7 @@
 using UnityEditor.AnimatedValues;
 using UnityEngine;
 
-namespace UnityEditor.Experimental.Rendering
+namespace UnityEditor.Experimental.Rendering.HDPipeline
 {
     using _ = CoreEditorUtils;
     using CED = CoreEditorDrawer<LightLoopSettingsUI, SerializedLightLoopSettings>;
@@ -50,10 +50,8 @@ namespace UnityEditor.Experimental.Rendering
                     EditorGUILayout.PropertyField(p.enableComputeMaterialVariants, _.GetContent("Enable Compute Material Variants"));
                     EditorGUI.indentLevel--;
                 }
-                EditorGUILayout.EndFadeGroup();
                 GUILayout.EndVertical();
             }
-            EditorGUILayout.EndFadeGroup();
             GUILayout.EndVertical();
 
             //EditorGUI.indentLevel--;
