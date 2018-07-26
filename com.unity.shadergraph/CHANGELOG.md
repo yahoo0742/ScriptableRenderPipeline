@@ -93,3 +93,4 @@ You can now see the generated code for any specific node. To do so, right-click 
 - `Blend` node now supports Overwrite mode.
 - `Simple Noise` node no longer has a loop.
 - The `Polygon` node now calculates radius based on apothem.
+- `Normal Strength` node now calculates Z value more accurately.
