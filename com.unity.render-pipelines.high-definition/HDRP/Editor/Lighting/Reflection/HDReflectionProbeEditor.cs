@@ -2,11 +2,10 @@ using System.Collections.Generic;
 using UnityEditorInternal;
 using UnityEngine;
 using UnityEngine.Assertions;
-using UnityEngine.Experimental.Rendering;
 using UnityEngine.Experimental.Rendering.HDPipeline;
 using UnityEngine.Rendering;
 
-namespace UnityEditor.Experimental.Rendering
+namespace UnityEditor.Experimental.Rendering.HDPipeline
 {
     [CustomEditorForRenderPipeline(typeof(ReflectionProbe), typeof(HDRenderPipelineAsset))]
     [CanEditMultipleObjects]
@@ -22,8 +21,6 @@ namespace UnityEditor.Experimental.Rendering
             Undo.SetCurrentGroupName("Remove HD Reflection Probe");
             Undo.DestroyObjectImmediate(go.GetComponent<ReflectionProbe>());
             Undo.DestroyObjectImmediate(go.GetComponent<HDAdditionalReflectionData>());
-            Undo.DestroyObjectImmediate(go.GetComponent<MeshRenderer>());
-            Undo.DestroyObjectImmediate(go.GetComponent<MeshFilter>());
         }
 
         static Dictionary<ReflectionProbe, HDReflectionProbeEditor> s_ReflectionProbeEditors = new Dictionary<ReflectionProbe, HDReflectionProbeEditor>();
@@ -57,9 +54,7 @@ namespace UnityEditor.Experimental.Rendering
             m_AdditionalDataSerializedObject = new SerializedObject(additionalData);
             m_SerializedHdReflectionProbe = new SerializedHDReflectionProbe(serializedObject, m_AdditionalDataSerializedObject);
             m_UIState.owner = this;
-            m_UIState.Reset(
-                m_SerializedHdReflectionProbe,
-                Repaint);
+            m_UIState.Reset(m_SerializedHdReflectionProbe, Repaint);
 
             foreach (var t in targets)
             {
@@ -68,13 +63,8 @@ namespace UnityEditor.Experimental.Rendering
             }
 
             InitializeAllTargetProbes();
-            ChangeVisibilityOfAllTargets(true);
         }
 
-        void OnDisable()
-        {
-            ChangeVisibilityOfAllTargets(false);
-        }
 
         public override void OnInspectorGUI()
         {
@@ -92,7 +82,7 @@ namespace UnityEditor.Experimental.Rendering
 
             p.Apply();
 
-            HideAdditionalComponents(false);
+            //HideAdditionalComponents(false);
 
             HDReflectionProbeUI.DoShortcutKey(p, this);
         }
@@ -113,15 +103,8 @@ namespace UnityEditor.Experimental.Rendering
             var flags = visible ? HideFlags.None : HideFlags.HideInInspector;
             for (var i = 0; i < targets.Length; ++i)
             {
-                var target = targets[i];
                 var addData = adds[i];
-                var p = (ReflectionProbe)target;
-                var meshRenderer = p.GetComponent<MeshRenderer>();
-                var meshFilter = p.GetComponent<MeshFilter>();
-
                 addData.hideFlags = flags;
-                meshRenderer.hideFlags = flags;
-                meshFilter.hideFlags = flags;
             }
         }
 
@@ -153,42 +136,26 @@ namespace UnityEditor.Experimental.Rendering
             }
         }
 
-        static void InspectColorsGUI()
-        {
-            EditorGUILayout.LabelField("Color Theme", EditorStyles.largeLabel);
-            k_GizmoThemeColorExtent = EditorGUILayout.ColorField("Extent", k_GizmoThemeColorExtent);
-            k_GizmoThemeColorExtentFace = EditorGUILayout.ColorField("Extent Face", k_GizmoThemeColorExtentFace);
-            k_GizmoThemeColorInfluenceBlend = EditorGUILayout.ColorField("Influence Blend", k_GizmoThemeColorInfluenceBlend);
-            k_GizmoThemeColorInfluenceBlendFace = EditorGUILayout.ColorField("Influence Blend Face", k_GizmoThemeColorInfluenceBlendFace);
-            k_GizmoThemeColorInfluenceNormalBlend = EditorGUILayout.ColorField("Influence Normal Blend", k_GizmoThemeColorInfluenceNormalBlend);
-            k_GizmoThemeColorInfluenceNormalBlendFace = EditorGUILayout.ColorField("Influence Normal Blend Face", k_GizmoThemeColorInfluenceNormalBlendFace);
-            k_GizmoThemeColorProjection = EditorGUILayout.ColorField("Projection", k_GizmoThemeColorProjection);
-            k_GizmoThemeColorProjectionFace = EditorGUILayout.ColorField("Projection Face", k_GizmoThemeColorProjectionFace);
-            k_GizmoThemeColorDisabled = EditorGUILayout.ColorField("Disabled", k_GizmoThemeColorDisabled);
-            k_GizmoThemeColorDisabledFace = EditorGUILayout.ColorField("Disabled Face", k_GizmoThemeColorDisabledFace);
-            EditorGUILayout.Space();
-        }
-
         static void ApplyConstraintsOnTargets(HDReflectionProbeUI s, SerializedHDReflectionProbe sp, Editor o)
         {
-            switch ((ShapeType)sp.influenceShape.enumValueIndex)
+            switch ((InfluenceShape)sp.influenceVolume.shape.enumValueIndex)
             {
-                case ShapeType.Box:
+                case InfluenceShape.Box:
                 {
-                    var maxBlendDistance = HDReflectionProbeEditorUtility.CalculateBoxMaxBlendDistance(s, sp, o);
-                    sp.targetData.blendDistancePositive = Vector3.Min(sp.targetData.blendDistancePositive, maxBlendDistance);
-                    sp.targetData.blendDistanceNegative = Vector3.Min(sp.targetData.blendDistanceNegative, maxBlendDistance);
-                    sp.targetData.blendNormalDistancePositive = Vector3.Min(sp.targetData.blendNormalDistancePositive, maxBlendDistance);
-                    sp.targetData.blendNormalDistanceNegative = Vector3.Min(sp.targetData.blendNormalDistanceNegative, maxBlendDistance);
+                    var maxBlendDistance = sp.influenceVolume.boxSize.vector3Value;
+                    sp.targetData.influenceVolume.boxBlendDistancePositive = Vector3.Min(sp.targetData.influenceVolume.boxBlendDistancePositive, maxBlendDistance);
+                    sp.targetData.influenceVolume.boxBlendDistanceNegative = Vector3.Min(sp.targetData.influenceVolume.boxBlendDistanceNegative, maxBlendDistance);
+                    sp.targetData.influenceVolume.boxBlendNormalDistancePositive = Vector3.Min(sp.targetData.influenceVolume.boxBlendNormalDistancePositive, maxBlendDistance);
+                    sp.targetData.influenceVolume.boxBlendNormalDistanceNegative = Vector3.Min(sp.targetData.influenceVolume.boxBlendNormalDistanceNegative, maxBlendDistance);
                     break;
                 }
-                case ShapeType.Sphere:
+                case InfluenceShape.Sphere:
                 {
-                    var maxBlendDistance = Vector3.one * HDReflectionProbeEditorUtility.CalculateSphereMaxBlendDistance(s, sp, o);
-                    sp.targetData.blendDistancePositive = Vector3.Min(sp.targetData.blendDistancePositive, maxBlendDistance);
-                    sp.targetData.blendDistanceNegative = Vector3.Min(sp.targetData.blendDistanceNegative, maxBlendDistance);
-                    sp.targetData.blendNormalDistancePositive = Vector3.Min(sp.targetData.blendNormalDistancePositive, maxBlendDistance);
-                    sp.targetData.blendNormalDistanceNegative = Vector3.Min(sp.targetData.blendNormalDistanceNegative, maxBlendDistance);
+                    var maxBlendDistance = Vector3.one * sp.influenceVolume.sphereRadius.floatValue;
+                    sp.targetData.influenceVolume.boxBlendDistancePositive = Vector3.Min(sp.targetData.influenceVolume.boxBlendDistancePositive, maxBlendDistance);
+                    sp.targetData.influenceVolume.boxBlendDistanceNegative = Vector3.Min(sp.targetData.influenceVolume.boxBlendDistanceNegative, maxBlendDistance);
+                    sp.targetData.influenceVolume.boxBlendNormalDistancePositive = Vector3.Min(sp.targetData.influenceVolume.boxBlendNormalDistancePositive, maxBlendDistance);
+                    sp.targetData.influenceVolume.boxBlendNormalDistanceNegative = Vector3.Min(sp.targetData.influenceVolume.boxBlendNormalDistanceNegative, maxBlendDistance);
                     break;
                 }
             }
