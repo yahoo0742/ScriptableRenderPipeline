@@ -3,6 +3,7 @@ using System.Runtime.InteropServices;
 using UnityEngine;
 using UnityEngine.Assertions;
 using UnityEngine.Rendering;
+using UnityEngine.Rendering.PostProcessing;
 
 namespace UnityEngine.Experimental.Rendering.HDPipeline
 {
@@ -176,7 +177,11 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
             var projectionModel = (ScreenSpaceLighting.ProjectionModel)ssReflection.deferredProjectionModel.value;
 
             if (projectionModel != ScreenSpaceLighting.ProjectionModel.HiZ)
+            {
+                // If we used proxy mode it is done in the deferred or forward shader, setup a white texture to silent error.
+                cmd.SetGlobalTexture(HDShaderIDs._SSReflectionResolveTexture, RuntimeUtilities.whiteTexture);
                 return false;
+            }                
 
             RenderPassAllocateRays(hdCamera, cmd, debug, debugTextureHandle, ssReflection);
             RenderPassCastRays(hdCamera, cmd, debug, debugTextureHandle, ssReflection);
