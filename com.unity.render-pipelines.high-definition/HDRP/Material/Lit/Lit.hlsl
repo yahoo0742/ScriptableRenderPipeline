@@ -1633,7 +1633,7 @@ IndirectLighting EvaluateBSDF_SSLighting(LightLoopContext lightLoopContext,
         float3 rayOriginWS              = preLightData.transparentPositionWS;
         float3 rayDirWS                 = preLightData.transparentRefractV;
         float mipLevel                  = preLightData.transparentSSMipLevel;
-#if DEBUG_DISPLAY
+#ifdef DEBUG_DISPLAY
         bool debug                      = _DebugLightingMode == DEBUGLIGHTINGMODE_SCREEN_SPACE_TRACING_REFRACTION
                                         && !any(int2(_MouseClickPixelCoord.xy) - int2(posInput.positionSS));
 #endif
@@ -1748,7 +1748,7 @@ IndirectLighting EvaluateBSDF_SSLighting(LightLoopContext lightLoopContext,
             lighting.specularReflected = F * color.rgb * weight;
             UpdateLightingHierarchyWeights(hierarchyWeight, weight);
 
-#if DEBUG_DISPLAY
+#ifdef DEBUG_DISPLAY
             if (_DebugLightingMode == DEBUGLIGHTINGMODE_SCREEN_SPACE_TRACING_REFLECTION)
             {
                 switch (_DebugLightingSubMode)
@@ -1776,7 +1776,7 @@ IndirectLighting EvaluateBSDF_SSLighting(LightLoopContext lightLoopContext,
             // Initialize screen space tracing
             float3 rayOriginWS              = posInput.positionWS;
             float3 rayDirWS                 = reflect(-V, bsdfData.normalWS);
-#if DEBUG_DISPLAY
+#ifdef DEBUG_DISPLAY
             bool debug                      = _DebugLightingMode == DEBUGLIGHTINGMODE_SCREEN_SPACE_TRACING_REFLECTION
                                             && !any(int2(_MouseClickPixelCoord.xy) - int2(posInput.positionSS));
 #endif
@@ -1826,7 +1826,7 @@ IndirectLighting EvaluateBSDF_SSLighting(LightLoopContext lightLoopContext,
             float3 F = preLightData.specularFGD;
             lighting.specularReflected = F * preLD.rgb * weight;
 
-#if DEBUG_DISPLAY
+#ifdef DEBUG_DISPLAY
             if (_DebugLightingMode == DEBUGLIGHTINGMODE_SCREEN_SPACE_TRACING_REFLECTION)
             {
                 switch (_DebugLightingSubMode)
@@ -1850,7 +1850,6 @@ IndirectLighting EvaluateBSDF_SSLighting(LightLoopContext lightLoopContext,
 
     return lighting;
 }
-
 //-----------------------------------------------------------------------------
 // EvaluateBSDF_Env
 // ----------------------------------------------------------------------------
