@@ -42,8 +42,6 @@ namespace UnityEditor.Experimental.Rendering.HDPipeline
 
             overrideFieldOfView = serializedObject.Find((PlanarReflectionProbe p) => p.overrideFieldOfView);
             fieldOfViewOverride = serializedObject.Find((PlanarReflectionProbe p) => p.fieldOfViewOverride);
-
-
         }
 
 
@@ -57,9 +55,13 @@ namespace UnityEditor.Experimental.Rendering.HDPipeline
             capturePositionMode.enumValueIndex = (int)PlanarReflectionProbe.CapturePositionMode.MirrorCamera;
         }
 
-        public void Apply()
+        internal override void Apply()
         {
-            serializedObject.ApplyModifiedProperties();
+            base.Apply();
+            //[TODO]check inheritence in serializedObject
+            //serializedObject.ApplyModifiedProperties();
+            //if (proxyVolumeComponent != null)
+            //    proxyVolumeComponent.Apply();
         }
     }
 }

@@ -77,5 +77,10 @@ namespace UnityEditor.Experimental.Rendering.HDPipeline
             //if (updateProxyVolume)
             //    InstantiateProxyVolume(serializedObject);
         }
+
+        internal virtual void Apply()
+        {
+            serializedObject.ApplyModifiedProperties();
+        }
     }
 }
