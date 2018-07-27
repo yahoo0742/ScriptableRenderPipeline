@@ -5,7 +5,7 @@ using UnityEngine.Rendering;
 
 namespace UnityEditor.Experimental.Rendering.HDPipeline
 {
-    internal class SerializedHDProbe
+    internal abstract class SerializedHDProbe
     {
         internal SerializedObject serializedObject;
 
